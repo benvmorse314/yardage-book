@@ -2,7 +2,7 @@
    Bump VER on every deploy that changes any cached asset. */
 'use strict';
 
-const VER = 'yb-v1.1.0';
+const VER = 'yb-v1.2.0';
 const SHELL = [
   './',
   'index.html',

@@ -277,8 +277,15 @@ h2.disp{
   border-top:2px solid var(--line2);
   padding:19px 19px calc(26px + env(safe-area-inset-bottom)); max-height:82vh; overflow:auto;
 }
-.shead{display:flex; justify-content:space-between; align-items:center; padding-bottom:6px}
+.shead{display:flex; justify-content:space-between; align-items:center; padding-bottom:2px}
 .shead b{font-size:17px; font-weight:600}
+.gearline{font-size:10.5px; letter-spacing:.08em; color:var(--faint); padding-bottom:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.predictbtn{
+  width:100%; margin-top:12px; height:48px; border:1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color:var(--accent); font-family:var(--mono); font-size:11.5px; letter-spacing:.1em;
+}
+.predictbtn:active{background:var(--accent); color:var(--ink)}
+.predictbtn .mono{font-size:12px}
 .subs{display:flex; flex-direction:column; gap:8px; padding-top:10px}
 .subbtn{
   text-align:left; padding:13px 14px; border:1px solid var(--line2);
@@ -386,13 +393,37 @@ const CLUB_LIB = [
   {key:'7i',  name:'7 Iron',         type:'iron',   loft:34},
   {key:'8i',  name:'8 Iron',         type:'iron',   loft:38},
   {key:'9i',  name:'9 Iron',         type:'iron',   loft:42},
+  {key:'UT',  name:'Utility Iron',   type:'iron',   loft:20},
   {key:'PW',  name:'Pitching Wedge', type:'wedge',  loft:46},
   {key:'GW',  name:'Gap Wedge',      type:'wedge',  loft:50},
+  {key:'52',  name:'52 Wedge',       type:'wedge',  loft:52},
   {key:'SW',  name:'Sand Wedge',     type:'wedge',  loft:54},
+  {key:'56',  name:'56 Wedge',       type:'wedge',  loft:56},
   {key:'LW',  name:'Lob Wedge',      type:'wedge',  loft:58},
+  {key:'60',  name:'60 Wedge',       type:'wedge',  loft:60},
   {key:'64',  name:'64 Wedge',       type:'wedge',  loft:64}
 ];
-const DEFAULT_BAG = ['DR','3W','4H','5i','6i','7i','8i','9i','PW','GW','SW','LW'];
+
+/* Ben's real bag - the default/reset bag, with the clubs + equipment he plays.
+   Lofts are best-guess starting points; tune each in the club sheet. */
+const BAG_SPEC = [
+  {key:'DR', name:'Driver',         type:'wood',  loft:10.5, head:'Callaway Elyte',   shaft:'Graphite Design Tour AD GC 6'},
+  {key:'5W', name:'5 Wood',         type:'wood',  loft:18},
+  {key:'7W', name:'7 Wood',         type:'wood',  loft:21},
+  {key:'3i', name:'3 Iron (UT)',    type:'iron',  loft:20,   head:'Callaway UT 2024', shaft:'Graphite Design 85g Stiff (hybrid)'},
+  {key:'4i', name:'4 Iron',         type:'iron',  loft:22,   head:'Takomo 201T mkII'},
+  {key:'5i', name:'5 Iron',         type:'iron',  loft:25,   head:'Takomo 201T mkII'},
+  {key:'6i', name:'6 Iron',         type:'iron',  loft:28,   head:'Takomo 201T mkII'},
+  {key:'7i', name:'7 Iron',         type:'iron',  loft:31,   head:'Takomo 201T mkII'},
+  {key:'8i', name:'8 Iron',         type:'iron',  loft:35,   head:'Takomo 201T mkII'},
+  {key:'9i', name:'9 Iron',         type:'iron',  loft:40,   head:'Takomo 201T mkII'},
+  {key:'PW', name:'Pitching Wedge', type:'wedge', loft:45,   head:'Takomo 201T mkII'},
+  {key:'52', name:'52 Wedge',       type:'wedge', loft:52},
+  {key:'56', name:'56 Wedge',       type:'wedge', loft:56},
+  {key:'60', name:'60 Wedge',       type:'wedge', loft:60}
+];
+/* pristine v1 default - a bag matching this exactly (untouched, no data) auto-upgrades to BAG_SPEC */
+const LEGACY_KEYS = ['3W','4H','5i','6i','7i','8i','9i','DR','GW','LW','PW','SW'];
 const TYPES = ['wood','hybrid','iron','wedge'];
 
 /* ---------- REFERENCE CURVES ----------
@@ -448,13 +479,14 @@ let UI = { tab:'bag', sheet:null, saveT:null, tipT:null, confirm:null,
 
 function mkClub(l){
   return {id:l.key, key:l.key, name:l.name, type:l.type, loft:l.loft,
+          head:l.head||'', shaft:l.shaft||'',
           carry:null, ball:null, auto:true, readings:[]};
 }
 function defaults(){
   return {
     v:1,
     settings:{ accent:'#3E9B6B', unit:'yd', sunit:'mph', win:5 },
-    bag: DEFAULT_BAG.map(k => mkClub(CLUB_LIB.find(c => c.key===k))),
+    bag: BAG_SPEC.map(mkClub),
     meta:{ lastBackup:null }
   };
 }
@@ -476,6 +508,8 @@ function normalize(d){
     if(TYPES.indexOf(c.type) < 0) c.type = 'iron';
     c.key = c.key ? String(c.key).slice(0, 4) : '?';
     c.name = c.name ? String(c.name).slice(0, 24) : String(c.key);
+    c.head = c.head ? String(c.head).slice(0, 40) : '';
+    c.shaft = c.shaft ? String(c.shaft).slice(0, 48) : '';
     if(c.auto === undefined) c.auto = true;
     c.carry = num(c.carry); c.ball = num(c.ball);
     if(!Array.isArray(c.readings)) c.readings = [];
@@ -491,6 +525,12 @@ function normalize(d){
   }
   if(!d.meta || typeof d.meta !== 'object' || Array.isArray(d.meta)) d.meta = { lastBackup:null };
   d.meta.rev = (typeof d.meta.rev === 'number' && isFinite(d.meta.rev)) ? d.meta.rev : 0;
+  /* courtesy upgrade: a pristine v1 default bag (never customized, no data) becomes the real bag */
+  try{
+    const keys = d.bag.map(c => c.key).slice().sort();
+    const pristine = d.bag.every(c => c.readings.length===0 && !c.head && !c.shaft && c.carry===null && c.ball===null && c.auto!==false);
+    if(pristine && keys.length===LEGACY_KEYS.length && keys.every((k,i) => k===LEGACY_KEYS[i])) d.bag = defaults().bag;
+  }catch(e){}
   return d;
 }
 function num(v){
@@ -585,6 +625,12 @@ function sLab(){ return S.settings.sunit==='kmh' ? 'km/h' : 'mph'; }
 function fmtD(yd){ return yd===null||yd===undefined ? '\u2014' : String(Math.round(d2u(yd))); }
 function fmtS(mph){ return mph===null||mph===undefined ? '\u2014' : String(round1(s2u(mph))); }
 function fmtLoft(L){ return (Math.round(L*2)/2) + '\u00b0'; }
+/* display category: a low-loft wood reads as "driver", an iron named like a utility reads as "utility" */
+function dispType(c){
+  if(c.type === 'wood' && c.loft < 13) return 'driver';
+  if(c.type === 'iron' && /\but\b|utility/i.test(c.name)) return 'utility';
+  return c.type;
+}
 
 /* ---------- STOCK NUMBERS ---------- */
 
@@ -781,7 +827,8 @@ function renderBag(){
     const estC = !has && M.fc ? M.carry(c.type, c.loft) : null;
     const estB = st.b === null && M.fb ? M.ball(c.type, c.loft) : null;
     const tr = trendOf(c);
-    let sub = fmtLoft(c.loft) + ' \u00b7 ' + c.type;
+    let sub = fmtLoft(c.loft) + ' \u00b7 ' + dispType(c);
+    if(c.head) sub += ' \u00b7 ' + c.head;
     const nr = c.readings.length;
     if(nr) sub += ' \u00b7 ' + nr + ' shot' + (nr===1?'':'s');
     if(st.srcC === 'manual') sub += ' \u00b7 manual';
@@ -1131,6 +1178,7 @@ function sheetClub(){
   const st = stockOf(c);
   const M = buildModel();
   let h = '<div class="shead"><b>'+esc(c.name)+'</b><button class="ghost" data-act="closesheet">CLOSE</button></div>';
+  h += '<div class="gearline mono">'+esc(fmtLoft(c.loft))+' \u00b7 '+esc(dispType(c).toUpperCase())+(c.shaft?' \u00b7 '+esc(c.shaft):'')+'</div>';
 
   h += '<div class="sheetsec"><div class="eyebrow">LOFT + TYPE</div>'
     + '<div class="setline" style="border:0"><span>Loft</span><div class="stepper">'
@@ -1171,7 +1219,19 @@ function sheetClub(){
     h += '<div class="wrow"><span>Chest-high takeaway</span>'+pcell(wpc, src)+'</div>'
       + '<div class="wrow"><span>Hip-high takeaway</span>'+pcell(wph, srh)+'</div>';
   }
+  if(M.fc){
+    h += '<button class="predictbtn" data-act="predictclub">'
+      + (st.c === null ? 'PREDICT THIS CLUB' : 'SEE FULL PREDICTION')
+      + ' \u00b7 <span class="mono">~'+fmtD(M.carry(c.type, c.loft))+' '+dLab()+'</span> \u2192</button>';
+  } else {
+    h += '<p class="bodytext dim small" style="margin-top:8px">Log one club with a carry number and this button predicts every other club for you.</p>';
+  }
   h += '</div>';
+
+  h += '<div class="sheetsec"><div class="eyebrow">EQUIPMENT</div>'
+    + '<div class="inpair"><span class="lab">HEAD</span><input class="cin" value="'+esc(c.head||'')+'" maxlength="40" placeholder="e.g. Takomo 201T mkII" data-act="chead"></div>'
+    + '<div class="inpair"><span class="lab">SHAFT</span><input class="cin" value="'+esc(c.shaft||'')+'" maxlength="48" placeholder="e.g. Graphite Design Tour AD" data-act="cshaft"></div>'
+    + '<p class="bodytext dim small">Head + shaft for this club. The loft above drives the model \u2014 set it to your club\u2019s real loft so predictions match.</p></div>';
 
   h += '<div class="sheetsec"><div class="eyebrow">LOG A READING</div>';
   if(c.type === 'wedge'){
@@ -1312,6 +1372,7 @@ function handleTap(e){
     sheetRender(); return;
   }
   if(act==='swtag'){ UI.swTag = b.dataset.t; sheetRender(); return; }
+  if(act==='predictclub' && c){ UI.pred = {type:c.type, loft:c.loft}; UI.tab='predict'; closeSheet(); window.scrollTo(0,0); return; }
   if(act==='rdel' && c){ c.readings.splice(parseInt(b.dataset.i,10), 1); save(); sheetRender(); return; }
   if(act==='crem' && c){
     if(UI.confirm === 'crem'+c.id){
@@ -1332,7 +1393,7 @@ function handleTap(e){
     const name = (nameEl && nameEl.value.trim()) || (fmtLoft(UI.addLoft)+' '+UI.addType);
     const key = name.replace(/[^0-9A-Za-z]/g,'').slice(0,2).toUpperCase() || '??';
     S.bag.push({id:'x'+Date.now().toString(36), key, name:name.slice(0,24), type:UI.addType, loft:UI.addLoft,
-                carry:null, ball:null, auto:true, readings:[]});
+                head:'', shaft:'', carry:null, ball:null, auto:true, readings:[]});
     save(); closeSheet(); toast(name+' added.', true); return;
   }
 
@@ -1380,6 +1441,8 @@ function handleInput(e){
   if(act==='mstockc' && c){ const v = parseIn(b.value); c.carry = v !== null ? clamp(u2d(v), 0, 450) : null; save(); return; }
   if(act==='mstockb' && c){ const v = parseIn(b.value); c.ball = v !== null ? clamp(u2s(v), 0, 260) : null; save(); return; }
   if(act==='cname' && c){ c.name = b.value.slice(0,24); save(); return; }
+  if(act==='chead' && c){ c.head = b.value.slice(0,40); save(); return; }
+  if(act==='cshaft' && c){ c.shaft = b.value.slice(0,48); save(); return; }
 }
 
 /* ---------- BOOT ---------- */
