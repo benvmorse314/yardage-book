@@ -256,6 +256,14 @@ h2.disp{
 .nin::placeholder{color:color-mix(in srgb, var(--faint) 72%, transparent)}
 .cin{flex:1; height:48px; border:1px solid var(--line2); background:var(--ink); padding:0 13px; font-size:16px; min-width:0}
 .cin:focus{border-color:var(--accent); outline:none}
+.modelsel{
+  flex:1; width:100%; height:48px; min-width:0; border:1px solid var(--line2); background:var(--ink); color:var(--chalk);
+  font-family:var(--sans); font-size:15px; padding:0 34px 0 12px; -webkit-appearance:none; appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23A69C89' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 12px center;
+}
+.modelsel:focus{border-color:var(--accent); outline:none}
+.modelsel option,.modelsel optgroup{background:var(--panel); color:var(--chalk)}
 .inpair{display:flex; gap:9px; padding-top:11px; align-items:center}
 .inpair .lab{flex:none; width:86px; font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; color:var(--dim); text-transform:uppercase}
 .bigadd{
@@ -411,13 +419,13 @@ const BAG_SPEC = [
   {key:'5W', name:'5 Wood',         type:'wood',  loft:18},
   {key:'7W', name:'7 Wood',         type:'wood',  loft:21},
   {key:'3i', name:'3 Iron (UT)',    type:'iron',  loft:20,   head:'Callaway UT 2024', shaft:'Graphite Design 85g Stiff (hybrid)'},
-  {key:'4i', name:'4 Iron',         type:'iron',  loft:22,   head:'Takomo 201T mkII'},
-  {key:'5i', name:'5 Iron',         type:'iron',  loft:25,   head:'Takomo 201T mkII'},
-  {key:'6i', name:'6 Iron',         type:'iron',  loft:28,   head:'Takomo 201T mkII'},
-  {key:'7i', name:'7 Iron',         type:'iron',  loft:31,   head:'Takomo 201T mkII'},
-  {key:'8i', name:'8 Iron',         type:'iron',  loft:35,   head:'Takomo 201T mkII'},
-  {key:'9i', name:'9 Iron',         type:'iron',  loft:40,   head:'Takomo 201T mkII'},
-  {key:'PW', name:'Pitching Wedge', type:'wedge', loft:45,   head:'Takomo 201T mkII'},
+  {key:'4i', name:'4 Iron',         type:'iron',  loft:24,   head:'Takomo 201T mkII'},
+  {key:'5i', name:'5 Iron',         type:'iron',  loft:27,   head:'Takomo 201T mkII'},
+  {key:'6i', name:'6 Iron',         type:'iron',  loft:30.5, head:'Takomo 201T mkII'},
+  {key:'7i', name:'7 Iron',         type:'iron',  loft:34,   head:'Takomo 201T mkII'},
+  {key:'8i', name:'8 Iron',         type:'iron',  loft:38,   head:'Takomo 201T mkII'},
+  {key:'9i', name:'9 Iron',         type:'iron',  loft:42,   head:'Takomo 201T mkII'},
+  {key:'PW', name:'Pitching Wedge', type:'wedge', loft:46,   head:'Takomo 201T mkII'},
   {key:'52', name:'52 Wedge',       type:'wedge', loft:52},
   {key:'56', name:'56 Wedge',       type:'wedge', loft:56},
   {key:'60', name:'60 Wedge',       type:'wedge', loft:60}
@@ -425,6 +433,95 @@ const BAG_SPEC = [
 /* pristine v1 default - a bag matching this exactly (untouched, no data) auto-upgrades to BAG_SPEC */
 const LEGACY_KEYS = ['3W','4H','5i','6i','7i','8i','9i','DR','GW','LW','PW','SW'];
 const TYPES = ['wood','hybrid','iron','wedge'];
+
+/* ---------- LOFT DATABASE ----------
+   Reference lofts for popular iron sets (where lofts vary wildly by model) plus
+   standard wood/hybrid tables. Pick a model in a club's sheet and the loft
+   auto-fills. Values are manufacturer reference specs - fine-tune to your set. */
+const IRON_MODELS = [
+  /* Players (traditional lofts, ~34deg 7-iron) */
+  {brand:'Takomo',    model:'201T mkII',        level:'Players',          lofts:{'2i':18,'3i':21,'4i':24,'5i':27,'6i':30.5,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Takomo',    model:'101T',             level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30.5,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Titleist',  model:'T100 (2023)',      level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Titleist',  model:'620 CB',           level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Titleist',  model:'620 MB',           level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Mizuno',    model:'Pro 241',          level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Mizuno',    model:'Pro 243',          level:'Players',          lofts:{'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Ping',      model:'Blueprint S',      level:'Players',          lofts:{'4i':24,'5i':27,'6i':30.5,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Callaway',  model:'Apex TCB',         level:'Players',          lofts:{'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Srixon',    model:'ZX7 Mk II',        level:'Players',          lofts:{'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'TaylorMade',model:'P7MC',             level:'Players',          lofts:{'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'TaylorMade',model:'P7MB',             level:'Players',          lofts:{'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
+  /* Players-distance (slightly strong, ~31-33deg 7-iron) */
+  {brand:'TaylorMade',model:'P770 (2024)',      level:'Players-distance', lofts:{'4i':22.5,'5i':25.5,'6i':29,'7i':32.5,'8i':37,'9i':42,'PW':47}},
+  {brand:'TaylorMade',model:'P790 (2023)',      level:'Players-distance', lofts:{'3i':19,'4i':21.5,'5i':24.5,'6i':27,'7i':30.5,'8i':34.5,'9i':39,'PW':44.5}},
+  {brand:'Titleist',  model:'T150',             level:'Players-distance', lofts:{'4i':23,'5i':26,'6i':29,'7i':32,'8i':36,'9i':41,'PW':46}},
+  {brand:'Titleist',  model:'T200 (2023)',      level:'Players-distance', lofts:{'4i':22,'5i':25,'6i':28,'7i':31,'8i':35,'9i':40,'PW':45}},
+  {brand:'Ping',      model:'i230',             level:'Players-distance', lofts:{'4i':23,'5i':26.5,'6i':30,'7i':33.5,'8i':37.5,'9i':42,'PW':46}},
+  {brand:'Ping',      model:'Blueprint T',      level:'Players-distance', lofts:{'4i':23,'5i':26.5,'6i':30,'7i':33.5,'8i':37.5,'9i':42,'PW':46}},
+  {brand:'Mizuno',    model:'Pro 245',          level:'Players-distance', lofts:{'4i':23,'5i':26,'6i':29,'7i':33,'8i':37,'9i':41,'PW':45}},
+  {brand:'Srixon',    model:'ZX5 Mk II',        level:'Players-distance', lofts:{'4i':23,'5i':26,'6i':29,'7i':33,'8i':37,'9i':42,'PW':47}},
+  {brand:'Callaway',  model:'Apex Pro (2024)',  level:'Players-distance', lofts:{'4i':23,'5i':26,'6i':29,'7i':33,'8i':37,'9i':41,'PW':45}},
+  {brand:'Cobra',     model:'King Tour',        level:'Players-distance', lofts:{'4i':23,'5i':26,'6i':29,'7i':33,'8i':37,'9i':41,'PW':45}},
+  /* Game-improvement (strong lofts, ~27-30deg 7-iron) */
+  {brand:'TaylorMade',model:'Qi (2024)',        level:'Game-improvement', lofts:{'5i':21.5,'6i':24.5,'7i':28,'8i':32.5,'9i':37.5,'PW':43}},
+  {brand:'TaylorMade',model:'Stealth',          level:'Game-improvement', lofts:{'5i':21.5,'6i':24.5,'7i':28.5,'8i':33,'9i':38,'PW':43}},
+  {brand:'Callaway',  model:'Paradym',          level:'Game-improvement', lofts:{'5i':21,'6i':24,'7i':27.5,'8i':32,'9i':37,'PW':42}},
+  {brand:'Callaway',  model:'Rogue ST Max',     level:'Game-improvement', lofts:{'5i':21,'6i':24,'7i':27,'8i':31.5,'9i':36,'PW':41}},
+  {brand:'Ping',      model:'G430',             level:'Game-improvement', lofts:{'5i':22.5,'6i':25.5,'7i':29,'8i':33.5,'9i':38.5,'PW':43.5}},
+  {brand:'Titleist',  model:'T350',             level:'Game-improvement', lofts:{'5i':23,'6i':26,'7i':29,'8i':34,'9i':39,'PW':44}},
+  {brand:'Mizuno',    model:'JPX 923 Hot Metal',level:'Game-improvement', lofts:{'5i':23,'6i':26,'7i':30,'8i':34,'9i':39,'PW':44}},
+  {brand:'Cobra',     model:'Aerojet',          level:'Game-improvement', lofts:{'5i':21.5,'6i':24.5,'7i':28.5,'8i':33,'9i':38,'PW':43}},
+  {brand:'Cleveland', model:'Launcher XL',      level:'Game-improvement', lofts:{'5i':21,'6i':24,'7i':27,'8i':31,'9i':36,'PW':41}},
+  /* Generic fallbacks if you do not know your exact model */
+  {brand:'Generic',   model:'Traditional lofts',level:'Generic',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30.5,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Generic',   model:'Strong lofts',     level:'Generic',          lofts:{'4i':20,'5i':23,'6i':26,'7i':29.5,'8i':34,'9i':39,'PW':44}}
+];
+const WOOD_LOFTS   = {'DR':10.5,'2W':13,'3W':15,'4W':16.5,'5W':18,'7W':21,'9W':24,'11W':27};
+const HYBRID_LOFTS = {'1H':16,'2H':17,'3H':19,'4H':22,'5H':25,'6H':28,'7H':31};
+function ironModelLabel(m){ return m.brand + ' ' + m.model; }
+const CORE_IRONS = ['4i','5i','6i','7i','8i','9i','PW'];
+
+/* grouped <option>s for a model picker; preselect the one matching selHead */
+function ironModelOptions(selHead, placeholder){
+  let o = '<option value="">' + (placeholder || '-- pick a model --') + '</option>';
+  let lvl = '';
+  IRON_MODELS.forEach((m, i) => {
+    if(m.level !== lvl){ if(lvl) o += '</optgroup>'; o += '<optgroup label="'+esc(m.level)+'">'; lvl = m.level; }
+    const lbl = ironModelLabel(m);
+    o += '<option value="'+i+'"'+(selHead===lbl?' selected':'')+'>'+esc(lbl)+'</option>';
+  });
+  if(lvl) o += '</optgroup>';
+  return o;
+}
+
+/* bulk-apply a model to the standard iron slots (protects a 2i/3i driving-iron
+   or utility, which is usually a different club). addMissing also creates any
+   core iron the model defines that isn't in the bag yet. */
+function applyIronModel(idx, addMissing){
+  const m = IRON_MODELS[+idx];
+  if(!m){ toast('Pick a model first.'); return; }
+  const label = ironModelLabel(m).slice(0,40);
+  let updated = 0, added = 0;
+  for(const key of CORE_IRONS){
+    if(m.lofts[key] === undefined) continue;
+    const loft = clamp(m.lofts[key], 6, 66);
+    const club = S.bag.find(x => x.key === key);
+    if(club){ club.loft = loft; club.head = label; updated++; }
+    else if(addMissing){
+      const lib = CLUB_LIB.find(l => l.key === key);
+      S.bag.push({id:'x'+Date.now().toString(36)+key, key, name: lib ? lib.name : key,
+                  type: lib ? lib.type : (key==='PW'?'wedge':'iron'), loft,
+                  head: label, shaft:'', carry:null, ball:null, auto:true, readings:[]});
+      added++;
+    }
+  }
+  save();
+  const parts = [];
+  if(updated) parts.push(updated + ' re-lofted');
+  if(added) parts.push(added + ' added');
+  toast(label + (parts.length ? ': ' + parts.join(', ') : ' - no core irons in your bag'), true);
+}
 
 /* ---------- REFERENCE CURVES ----------
    Shape backbone for the model. Absolute level is irrelevant - predictions
@@ -1145,6 +1242,10 @@ function renderTune(){
   for(const a of ACCENTS) h += '<button class="swatch'+(st.accent===a.hex?' on':'')+'" style="--sw:'+a.hex+'" data-act="accent" data-hex="'+a.hex+'" aria-label="'+a.name+'"></button>';
   h += '</div></div>';
 
+  h += '<div class="card pad"><div class="eyebrow">MY BAG</div>'
+    + '<p class="bodytext dim small">Tap any club in THE BAG to set its loft, model, head and shaft. The button below reloads your default bag (Driver, 5W, 7W, 3i/utility, 4i-PW Takomo, 52/56/60) \u2014 it replaces the current club list but keeps your settings.</p>'
+    + '<div class="segrow"><button class="seg'+(UI.confirm==='rebag'?' danger':'')+'" data-act="rebag">'+(UI.confirm==='rebag'?'TAP AGAIN \u2014 REPLACES YOUR CLUBS':'RESET BAG TO MY CLUBS')+'</button></div></div>';
+
   const bk = S.meta.lastBackup;
   const bkTxt = bk ? 'Last backup '+Math.max(0,Math.round((Date.now()-bk)/864e5))+'d ago.' : 'No backup taken yet.';
   h += '<div class="card pad"><div class="eyebrow">DATA</div>'
@@ -1228,10 +1329,15 @@ function sheetClub(){
   }
   h += '</div>';
 
-  h += '<div class="sheetsec"><div class="eyebrow">EQUIPMENT</div>'
-    + '<div class="inpair"><span class="lab">HEAD</span><input class="cin" value="'+esc(c.head||'')+'" maxlength="40" placeholder="e.g. Takomo 201T mkII" data-act="chead"></div>'
+  h += '<div class="sheetsec"><div class="eyebrow">EQUIPMENT</div>';
+  if(c.type === 'iron'){
+    const known = c.key && IRON_MODELS.some(m => m.lofts[c.key] !== undefined);
+    h += '<div class="inpair"><span class="lab">MODEL</span><select class="modelsel" data-act="setmodel">'+ironModelOptions(c.head, '-- pick to auto-fill loft --')+'</select></div>'
+      + (known ? '' : '<p class="bodytext dim small" style="margin:6px 0 0">This club\u2019s slot ('+esc(c.key)+') isn\u2019t in the model tables \u2014 picking a model just sets the head; set loft manually above.</p>');
+  }
+  h += '<div class="inpair"><span class="lab">HEAD</span><input class="cin" value="'+esc(c.head||'')+'" maxlength="40" placeholder="e.g. Takomo 201T mkII" data-act="chead"></div>'
     + '<div class="inpair"><span class="lab">SHAFT</span><input class="cin" value="'+esc(c.shaft||'')+'" maxlength="48" placeholder="e.g. Graphite Design Tour AD" data-act="cshaft"></div>'
-    + '<p class="bodytext dim small">Head + shaft for this club. The loft above drives the model \u2014 set it to your club\u2019s real loft so predictions match.</p></div>';
+    + '<p class="bodytext dim small">'+(c.type==='iron'?'Pick your iron model and the loft fills in. ':'')+'The loft above drives the model \u2014 set it to your club\u2019s real loft so predictions match.</p></div>';
 
   h += '<div class="sheetsec"><div class="eyebrow">LOG A READING</div>';
   if(c.type === 'wedge'){
@@ -1284,6 +1390,12 @@ function sheetAdd(){
     h += '<button class="subbtn" data-act="libadd" data-key="'+esc(l.key)+'"><span>'+esc(l.name)+'</span><span class="mono">'+fmtLoft(l.loft)+' \u00b7 '+l.type+'</span></button>';
   }
   h += '</div>';
+  h += '<div class="sheetsec"><div class="eyebrow">SET YOUR IRONS FROM A MODEL</div>'
+    + '<select class="modelsel" id="ironsetsel">'+ironModelOptions(null, '-- pick your iron model --')+'</select>'
+    + '<div class="segrow" style="padding-top:10px">'
+    + '<button class="seg" data-act="applyironmodel" data-add="0">APPLY LOFTS TO MY IRONS</button>'
+    + '<button class="seg" data-act="applyironmodel" data-add="1">ADD FULL SET</button></div>'
+    + '<p class="bodytext dim small">Sets your 4i-PW to the model\u2019s real lofts (a 2i/3i driving-iron or utility is left alone). ADD FULL SET also creates any missing core irons.</p></div>';
   h += '<div class="sheetsec"><div class="eyebrow">OR A CUSTOM ONE</div>'
     + '<div class="inpair"><span class="lab">NAME</span><input class="cin" id="caddname" placeholder="e.g. Mini driver" maxlength="24"></div>'
     + '<div class="segrow">';
@@ -1338,7 +1450,7 @@ function handleTap(e){
   if(!b) return;
   const act = b.dataset.act;
   /* two-step confirms reset when you tap anything else */
-  if(UI.confirm && act !== 'crem' && act !== 'reset') UI.confirm = null;
+  if(UI.confirm && act !== 'crem' && act !== 'reset' && act !== 'rebag') UI.confirm = null;
 
   if(act==='club'){ UI.sheet = {k:'club', id:b.dataset.id}; UI.swTag = 'full'; openSheet(); return; }
   if(act==='addclub'){ UI.sheet = {k:'add'}; openSheet(); return; }
@@ -1386,6 +1498,13 @@ function handleTap(e){
     if(l && !S.bag.some(x => x.key === l.key)){ S.bag.push(mkClub(l)); save(); toast(l.name+' added.', true); sheetRender(); render(); }
     return;
   }
+  if(act==='applyironmodel'){
+    const selEl = el('ironsetsel');
+    const idx = selEl ? selEl.value : '';
+    if(idx === ''){ toast('Pick your iron model first.'); return; }
+    applyIronModel(idx, b.dataset.add === '1');
+    closeSheet(); return;
+  }
   if(act==='addtype'){ UI.addType = b.dataset.t; sheetRender(); return; }
   if(act==='addloft'){ UI.addLoft = clamp(Math.round((UI.addLoft + parseFloat(b.dataset.d))*2)/2, 6, 66); sheetRender(); return; }
   if(act==='customadd'){
@@ -1431,6 +1550,12 @@ function handleTap(e){
     } else { UI.confirm = 'reset'; render(); }
     return;
   }
+  if(act==='rebag'){
+    if(UI.confirm === 'rebag'){
+      UI.confirm = null; S.bag = defaults().bag; save(); render(); toast('Bag reset to your clubs.', true);
+    } else { UI.confirm = 'rebag'; render(); }
+    return;
+  }
 }
 
 function handleInput(e){
@@ -1455,6 +1580,19 @@ function handleInput(e){
 
   document.body.addEventListener('click', handleTap);
   document.body.addEventListener('input', handleInput);
+  document.body.addEventListener('change', e => {
+    const b = e.target.closest('[data-act]');
+    if(!b || b.dataset.act !== 'setmodel') return;
+    const c = UI.sheet && UI.sheet.k==='club' ? findClub(UI.sheet.id) : null;
+    if(!c || b.value === '') return;
+    const m = IRON_MODELS[+b.value];
+    if(!m) return;
+    c.head = ironModelLabel(m).slice(0,40);
+    const hit = m.lofts[c.key] !== undefined;
+    if(hit) c.loft = clamp(m.lofts[c.key], 6, 66);
+    save(); sheetRender();
+    toast(ironModelLabel(m) + (hit ? ' \u00b7 loft set to ' + fmtLoft(c.loft) : ' \u00b7 head set'), true);
+  });
   document.querySelectorAll('.tabbtn').forEach(b => b.addEventListener('click', ()=>{ UI.tab = b.dataset.tab; UI.confirm = null; render(); }));
   el('sheet').addEventListener('click', e => { if(e.target === el('sheet')) closeSheet(); });
   /* keep the sheet's controls reachable above the on-screen keyboard (iOS) */
