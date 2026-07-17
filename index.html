@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Yardage Book - stock yardage and ball speed tracker with club gap prediction.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Yardage Book">
+<meta name="theme-color" content="#0B0A08">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<title>Yardage Book</title>
+<style>
+/* ---------- faces ---------- */
+@font-face{
+  font-family:'Big Shoulders';
+  src:url('fonts/big-shoulders-display-100-900.woff2') format('woff2-variations');
+  font-weight:100 900; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:'Archivo';
+  src:url('fonts/archivo-100-900.woff2') format('woff2-variations');
+  font-weight:100 900; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:'Plex Mono';
+  src:url('fonts/ibm-plex-mono-400.woff2') format('woff2');
+  font-weight:400; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:'Plex Mono';
+  src:url('fonts/ibm-plex-mono-600.woff2') format('woff2');
+  font-weight:600; font-style:normal; font-display:swap;
+}
+
+/* ---------- tokens (Ground Force family) ---------- */
+:root{
+  --ink:#0B0A08;            /* asphalt */
+  --panel:#14110D;          /* rubber mat */
+  --panel2:#1D1913;         /* raised plate */
+  --chalk:#EDE6D8;          /* primary ink */
+  --dim:#A69C89;            /* worn chalk */
+  --faint:#6E6557;          /* stenciled */
+  --line:rgba(237,230,216,.10);
+  --line2:rgba(237,230,216,.24);
+  --accent:#3E9B6B;         /* turf */
+  --chartc:#199E70;         /* validated chart step of accent */
+  --turf:#3BC77E;           /* positive */
+  --gold:#E0A83C;           /* caution */
+  --danger:#F0594C;
+  --disp:'Big Shoulders', 'Arial Narrow', sans-serif;
+  --sans:'Archivo', 'Segoe UI', sans-serif;
+  --mono:'Plex Mono', ui-monospace, Consolas, monospace;
+  --snap:cubic-bezier(.2,1.4,.3,1);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+button,a,input,select,summary,label{touch-action:manipulation}
+html{color-scheme:dark}
+body{
+  margin:0; background:var(--ink); color:var(--chalk);
+  font:15.5px/1.5 var(--sans);
+  padding:0 18px calc(110px + env(safe-area-inset-bottom));
+  max-width:560px; margin-inline:auto;
+}
+body::before{
+  content:''; position:fixed; z-index:-2; inset:0; pointer-events:none;
+  background:
+    radial-gradient(120% 60% at 50% -8%, color-mix(in srgb, var(--accent) 7%, transparent) 0%, transparent 60%),
+    radial-gradient(140% 90% at 50% 115%, rgba(0,0,0,.55) 0%, transparent 55%);
+}
+body::after{
+  content:''; position:fixed; z-index:-1; inset:0; pointer-events:none; opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+.dim{color:var(--dim)}
+.small{font-size:12.5px; line-height:1.5}
+button{font:inherit; color:inherit; background:none; border:0; cursor:pointer; padding:0}
+input,select{font:inherit; color:var(--chalk)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+h1,h2,h3{text-wrap:balance}
+
+/* ---------- top bar ---------- */
+.top{
+  position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:10px;
+  padding:16px 2px 10px; margin:0 -18px; padding-inline:18px;
+  padding-top:calc(16px + env(safe-area-inset-top));
+  background:linear-gradient(color-mix(in srgb, var(--ink) 94%, transparent) 72%, transparent);
+  -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+}
+.mark{width:25px; height:25px; flex:none}
+.wordmark{
+  font-family:var(--disp); font-weight:800; font-size:19px; letter-spacing:.10em;
+  text-transform:uppercase; line-height:1;
+}
+.wordmark b{color:var(--accent); font-weight:800}
+#savedot{width:7px; height:7px; border-radius:50%; margin-left:auto; background:var(--dim); opacity:.4; transition:background .3s,opacity .3s}
+#savedot[data-s=saved]{background:var(--turf); opacity:1}
+#savedot[data-s=saving]{background:var(--accent); opacity:1}
+#savedot[data-s=err]{background:var(--danger); opacity:1}
+
+/* ---------- instrument cluster ---------- */
+.cluster{
+  display:flex; align-items:stretch; gap:14px;
+  border:1px solid var(--line); background:linear-gradient(180deg, var(--panel2), var(--panel));
+  padding:12px 14px 10px; margin:10px 0 18px; position:relative;
+}
+.cluster::before,.cluster::after{
+  content:''; position:absolute; width:9px; height:9px; border:1px solid var(--line2); pointer-events:none;
+}
+.cluster::before{top:-1px; left:-1px; border-right:0; border-bottom:0}
+.cluster::after{bottom:-1px; right:-1px; border-left:0; border-top:0}
+.wk{display:flex; align-items:baseline; gap:6px; flex:none}
+.wk .wklab{font-family:var(--mono); font-size:10px; letter-spacing:.22em; color:var(--faint); writing-mode:vertical-rl; text-orientation:mixed; transform:rotate(180deg); align-self:center}
+.wk b{font-family:var(--disp); font-weight:800; font-size:46px; line-height:.86; color:var(--accent); letter-spacing:.01em}
+.wk .of{font-family:var(--mono); font-size:11px; color:var(--faint); letter-spacing:.1em}
+.clmid{flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:4px; border-left:1px solid var(--line); padding-left:14px}
+.clblock{font-family:var(--disp); font-weight:700; font-size:19px; letter-spacing:.14em; text-transform:uppercase}
+.clsub{font-family:var(--mono); font-size:10px; letter-spacing:.08em; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ticks{display:flex; gap:4px; align-items:flex-end; padding-top:7px}
+.tick{height:14px; flex:1; background:var(--panel2); border:1px solid var(--line)}
+.tick.done{background:color-mix(in srgb, var(--turf) 40%, var(--panel2)); border-color:color-mix(in srgb, var(--turf) 45%, var(--line))}
+
+.pagetitle{padding:2px 2px 16px}
+.eyebrow{font-family:var(--mono); font-size:10.5px; letter-spacing:.2em; color:var(--faint); text-transform:uppercase}
+h2.disp{
+  font-family:var(--disp); font-size:42px; font-weight:800; letter-spacing:.015em;
+  text-transform:uppercase; margin:4px 0 0; line-height:.92;
+}
+
+/* ---------- cards ---------- */
+.card{
+  background:var(--panel); border:1px solid var(--line);
+  margin-bottom:14px; overflow:hidden; position:relative;
+}
+.card::before{content:''; position:absolute; inset:0 0 auto 0; height:2px; background:var(--line); pointer-events:none}
+.card.pad{padding:18px}
+.wrow{display:flex; justify-content:space-between; gap:14px; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px; align-items:center}
+.wrow:last-child{border-bottom:0}
+.bodytext{font-size:14px; color:var(--chalk); margin:12px 0 2px; line-height:1.62}
+.bodytext .dim{color:var(--dim)}
+.ghost{color:var(--dim); font-family:var(--mono); font-size:12px; letter-spacing:.05em; padding:7px 4px; min-height:36px}
+.ghost:active{color:var(--chalk)}
+.ghost.danger{color:var(--danger)}
+
+/* ---------- bag rows ---------- */
+.bagrow{
+  width:100%; text-align:left; display:flex; align-items:center; gap:13px;
+  padding:12px 16px; border-bottom:1px solid var(--line);
+}
+.bagrow:last-of-type{border-bottom:0}
+.bagrow:active{background:color-mix(in srgb, var(--chalk) 4%, transparent)}
+.tagbox{
+  flex:none; width:42px; height:42px; display:grid; place-items:center;
+  border:1px solid var(--line2); color:var(--chalk); background:var(--panel2);
+  font-family:var(--disp); font-weight:700; font-size:18px; letter-spacing:.04em;
+}
+.bagrow.dialed .tagbox{border-color:color-mix(in srgb, var(--turf) 45%, var(--line2)); color:var(--turf)}
+.bname{flex:1; min-width:0}
+.bname b{font-size:15.5px; font-weight:600; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.bsub{font-family:var(--mono); font-size:10.5px; color:var(--faint); letter-spacing:.05em; padding-top:2px; display:block}
+.bnum{flex:none; text-align:right}
+.bcarry{font-family:var(--disp); font-weight:800; font-size:27px; line-height:1; letter-spacing:.01em; display:block}
+.bcarry small{font-family:var(--mono); font-size:10px; font-weight:400; color:var(--dim); letter-spacing:.06em; margin-left:3px}
+.bball{font-family:var(--mono); font-size:10.5px; color:var(--dim); letter-spacing:.05em; padding-top:3px; display:block}
+.bagrow.est .bcarry{color:var(--faint); font-weight:700}
+.trend{font-family:var(--mono); font-size:10px; letter-spacing:.04em; margin-left:6px}
+.trend.up{color:var(--turf)} .trend.dn{color:var(--gold)}
+.mchip{
+  display:inline-block; font-family:var(--mono); font-size:9px; letter-spacing:.1em;
+  border:1px solid var(--line2); color:var(--faint); padding:2px 6px; vertical-align:2px; margin-left:7px;
+}
+.mchip.warn{color:var(--gold); border-color:color-mix(in srgb, var(--gold) 55%, transparent)}
+.mchip.good{color:var(--turf); border-color:color-mix(in srgb, var(--turf) 55%, transparent)}
+.mchip.acc{color:var(--accent); border-color:color-mix(in srgb, var(--accent) 55%, transparent)}
+.addrow{
+  width:100%; height:54px; border:1px dashed var(--line2); color:var(--dim);
+  font-family:var(--mono); font-size:12px; letter-spacing:.16em; margin-bottom:14px;
+}
+.addrow:active{color:var(--chalk); border-color:var(--chalk)}
+
+/* ---------- carry ladder ---------- */
+.lad{padding:6px 0 4px}
+.ladrow{display:grid; grid-template-columns:42px 1fr 58px; gap:10px; align-items:center; padding:3px 0}
+.ladkey{font-family:var(--disp); font-weight:700; font-size:15px; letter-spacing:.06em; color:var(--dim); text-align:left}
+.ladbar{height:16px; background:var(--panel2); position:relative}
+.ladbar i{position:absolute; inset:0 auto 0 0; background:var(--chartc); min-width:2px}
+.ladval{font-family:var(--mono); font-size:12.5px; text-align:right; font-variant-numeric:tabular-nums}
+.ladgap{display:grid; grid-template-columns:42px 1fr 58px; gap:10px; align-items:center; min-height:17px}
+.ladgap span{font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; color:var(--faint); grid-column:2; padding-left:2px}
+.ladgap.warn span{color:var(--gold)}
+
+/* ---------- wedge matrix ---------- */
+.wmx{padding-top:11px}
+.wmxh,.wmxr{display:grid; grid-template-columns:1.35fr 1fr 1fr 1fr; gap:8px; align-items:baseline}
+.wmxh{font-size:9.5px; letter-spacing:.14em; color:var(--faint); padding-bottom:8px}
+.wmxh span{text-align:right}
+.wmxh span:first-child{text-align:left}
+.wmxr{padding:9px 0; border-top:1px solid var(--line); font-size:14.5px}
+.wmxr span{text-align:right; font-variant-numeric:tabular-nums}
+.wmxr .wmxc{text-align:left; font-family:var(--disp); font-weight:700; font-size:16px; letter-spacing:.05em}
+.wmxr .wmxc i{font-family:var(--mono); font-style:normal; font-size:9.5px; color:var(--faint); letter-spacing:.06em; margin-left:4px}
+.wmxr b{font-weight:600}
+.west{color:var(--faint)}
+
+/* ---------- gap check rows ---------- */
+.gaprow{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); font-size:13.5px}
+.gaprow:last-child{border-bottom:0}
+.gappair{flex:1; font-family:var(--mono); font-size:12.5px; letter-spacing:.04em}
+.gappair .dim{color:var(--faint)}
+.gapval{font-family:var(--mono); font-size:13px; font-weight:600; min-width:52px; text-align:right}
+
+/* ---------- tiles (predict output) ---------- */
+.tiles{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px}
+.tile{background:var(--panel); border:1px solid var(--line); padding:14px 14px 13px; position:relative}
+.tile .tlabel{font-size:10px; letter-spacing:.06em; color:var(--dim); text-transform:uppercase; font-weight:500; font-family:var(--mono)}
+.tile .tval{font-family:var(--disp); font-size:44px; font-weight:800; line-height:1; padding-top:6px; letter-spacing:.01em}
+.tile .tval small{font-family:var(--mono); font-size:11px; font-weight:400; color:var(--dim); letter-spacing:.04em; margin-left:4px}
+.tile .tsub{font-family:var(--mono); font-size:10.5px; color:var(--faint); padding-top:5px}
+.tile.ghosted .tval{color:var(--faint)}
+
+/* ---------- charts ---------- */
+.chartcard{padding:16px 14px 12px}
+.charthead{display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:0 4px 8px}
+.chartwrap{position:relative}
+.chartwrap svg{display:block; width:100%; height:auto}
+.emptychart{padding:26px 8px 20px; text-align:center; color:var(--faint); font-size:13px}
+
+/* ---------- settings widgets ---------- */
+.setline{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--line); font-size:14px}
+.setline:last-child{border-bottom:0}
+.stepper{display:flex; align-items:center; gap:5px}
+.stepper .mono{min-width:66px; text-align:center; font-size:13px; letter-spacing:.07em}
+.stepper .ghost{width:40px; height:40px; text-align:center; border:1px solid var(--line2); font-size:15px; padding:0}
+.segrow{display:flex; gap:8px; padding-top:13px; flex-wrap:wrap}
+.seg{
+  flex:1; min-width:64px; height:48px; border:1px solid var(--line2);
+  font-family:var(--mono); font-size:12.5px; letter-spacing:.06em; color:var(--dim); padding:0 10px;
+}
+.seg.on{background:var(--chalk); border-color:var(--chalk); color:var(--ink); font-weight:600}
+.seg.danger{color:var(--danger); border-color:color-mix(in srgb, var(--danger) 50%, transparent)}
+.toggle{width:54px; height:32px; background:var(--panel2); border:1px solid var(--line2); position:relative; flex:none}
+.toggle i{position:absolute; top:3px; left:3px; width:24px; height:24px; background:var(--faint); transition:all .16s var(--snap)}
+.toggle.on{background:color-mix(in srgb, var(--turf) 40%, var(--panel2)); border-color:var(--turf)}
+.toggle.on i{left:25px; background:var(--turf)}
+.swatch{width:48px; height:48px; flex:none; background:var(--sw); border:2px solid transparent; opacity:.85}
+.swatch.on{border-color:var(--chalk); opacity:1}
+.nin{
+  height:48px; border:1px solid var(--line2); background:var(--ink);
+  text-align:center; font-size:17px; font-family:var(--mono); min-width:0; width:100%;
+  transition:border-color .15s;
+}
+.nin:focus{border-color:var(--accent); outline:none}
+.nin::placeholder{color:color-mix(in srgb, var(--faint) 72%, transparent)}
+.cin{flex:1; height:48px; border:1px solid var(--line2); background:var(--ink); padding:0 13px; font-size:16px; min-width:0}
+.cin:focus{border-color:var(--accent); outline:none}
+.inpair{display:flex; gap:9px; padding-top:11px; align-items:center}
+.inpair .lab{flex:none; width:86px; font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; color:var(--dim); text-transform:uppercase}
+.bigadd{
+  width:100%; height:52px; margin-top:13px;
+  border:1px solid var(--accent); color:var(--accent);
+  font-family:var(--mono); font-size:12.5px; letter-spacing:.18em;
+}
+.bigadd:active{background:var(--accent); color:var(--ink)}
+.readrow{display:grid; grid-template-columns:1fr 62px 72px 44px; gap:9px; align-items:center; padding:2px 0; border-top:1px solid var(--line); font-family:var(--mono); font-size:12px}
+.readrow .rd{color:var(--faint); font-size:11px}
+.readrow .rx{color:var(--faint); font-size:16px; text-align:center; min-height:44px; min-width:44px}
+.readrow .rx:active{color:var(--danger)}
+
+/* ---------- sheet ---------- */
+#sheet{position:fixed; inset:0; z-index:60; background:rgba(4,3,2,.74); display:none; align-items:flex-end; -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px)}
+#sheet.open{display:flex}
+#sheetbody{
+  width:100%; max-width:560px; margin-inline:auto; background:var(--panel);
+  border-top:2px solid var(--line2);
+  padding:19px 19px calc(26px + env(safe-area-inset-bottom)); max-height:82vh; overflow:auto;
+}
+.shead{display:flex; justify-content:space-between; align-items:center; padding-bottom:6px}
+.shead b{font-size:17px; font-weight:600}
+.subs{display:flex; flex-direction:column; gap:8px; padding-top:10px}
+.subbtn{
+  text-align:left; padding:13px 14px; border:1px solid var(--line2);
+  background:var(--panel2); font-size:14px; display:flex; justify-content:space-between; gap:10px; align-items:center;
+}
+.subbtn .mono{color:var(--dim); font-size:12px}
+.sheetsec{padding-top:16px}
+
+/* ---------- tabs / toast / splash ---------- */
+.tabs{
+  position:fixed; left:0; right:0; bottom:0; z-index:40; display:flex; justify-content:center; gap:2px;
+  background:color-mix(in srgb, var(--ink) 82%, transparent);
+  -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px);
+  border-top:1px solid var(--line); padding:8px 10px calc(10px + env(safe-area-inset-bottom));
+}
+.tabbtn{
+  flex:1; max-width:142px; display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding:8px 4px; color:var(--faint); position:relative;
+}
+.tabbtn::before{content:''; position:absolute; top:-9px; left:25%; right:25%; height:2px; background:transparent}
+.tabbtn svg{width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round}
+.tabbtn span{font-size:9.5px; letter-spacing:.16em; font-weight:600}
+.tabbtn.on{color:var(--accent)}
+.tabbtn.on::before{background:var(--accent)}
+
+#toast{
+  position:fixed; top:calc(14px + env(safe-area-inset-top)); left:50%; transform:translate(-50%,-14px); z-index:70;
+  background:var(--panel2); border:1px solid var(--line2); padding:12px 18px;
+  font-size:13.5px; opacity:0; pointer-events:none; transition:all .22s; max-width:88vw; text-align:center;
+}
+#toast.show{opacity:1; transform:translate(-50%,0)}
+#toast.good{border-color:var(--turf)}
+
+#splash{
+  position:fixed; inset:0; z-index:90; background:var(--ink); display:grid; place-items:center;
+  transition:opacity .5s;
+}
+#splash.hide{opacity:0; pointer-events:none}
+.splashin{display:flex; flex-direction:column; align-items:center; gap:16px}
+.splashin .mark{width:54px; height:54px}
+.splashin .wordmark{font-size:24px}
+
+.foot{text-align:center; font-family:var(--mono); font-size:10px; letter-spacing:.24em; padding:12px 0 26px; text-transform:uppercase; color:var(--faint)}
+
+body.boot #view>*{animation:risein .4s var(--snap) both; animation-delay:.32s}
+body.boot #view>*:nth-child(1){animation-delay:.02s}
+body.boot #view>*:nth-child(2){animation-delay:.06s}
+body.boot #view>*:nth-child(3){animation-delay:.10s}
+body.boot #view>*:nth-child(4){animation-delay:.14s}
+body.boot #view>*:nth-child(5){animation-delay:.18s}
+body.boot #view>*:nth-child(6){animation-delay:.22s}
+@keyframes risein{0%{opacity:0; transform:translateY(10px)}100%{opacity:1; transform:none}}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important; transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<div id="splash"><div class="splashin">
+  <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 27h26" stroke="#EDE6D8" stroke-width="2" stroke-linecap="round"/><path d="M4 24C10 20 16 14 20 8" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round" stroke-dasharray="2.5 3.5"/><path d="M24 27V9" stroke="#EDE6D8" stroke-width="2" stroke-linecap="round"/><path d="M24 9l6 2.6-6 2.6z" fill="var(--accent)"/></svg>
+  <div class="wordmark">YARDAGE<b>BOOK</b></div>
+</div></div>
+
+<header class="top">
+  <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 27h26" stroke="#EDE6D8" stroke-width="2" stroke-linecap="round"/><path d="M4 24C10 20 16 14 20 8" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round" stroke-dasharray="2.5 3.5"/><path d="M24 27V9" stroke="#EDE6D8" stroke-width="2" stroke-linecap="round"/><path d="M24 9l6 2.6-6 2.6z" fill="var(--accent)"/></svg>
+  <div class="wordmark">YARDAGE<b>BOOK</b></div>
+  <div id="savedot" data-s="saved" title="Saved"></div>
+</header>
+
+<main id="view"></main>
+
+<nav class="tabs">
+  <button class="tabbtn on" data-tab="bag"><svg viewBox="0 0 24 24"><rect x="7.5" y="9" width="9" height="11.5" rx="1.5"/><path d="M10 9V4.5M13.5 9l.8-5M16.5 9l1.6-4M7.5 13.5h9"/></svg><span>BAG</span></button>
+  <button class="tabbtn" data-tab="gaps"><svg viewBox="0 0 24 24"><path d="M4 5h15M4 19h11M12 8.5v7M9.5 10.5L12 8l2.5 2.5M9.5 13.5L12 16l2.5-2.5"/></svg><span>GAPS</span></button>
+  <button class="tabbtn" data-tab="predict"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/><circle cx="12" cy="12" r="1.1" fill="currentColor"/></svg><span>PREDICT</span></button>
+  <button class="tabbtn" data-tab="tune"><svg viewBox="0 0 24 24"><path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></svg><span>TUNE</span></button>
+</nav>
+
+<div id="sheet"><div id="sheetbody" role="dialog" aria-modal="true" tabindex="-1"></div></div>
+<div id="toast" role="status"></div>
+<input type="file" id="importfile" accept="application/json,.json" style="display:none">
+
+<script>
+'use strict';
+/* YARDAGE BOOK - stock yardage + ball speed tracker. Ground Force companion. */
+
+/* ---------- CLUB LIBRARY ---------- */
+
+const CLUB_LIB = [
+  {key:'DR',  name:'Driver',         type:'wood',   loft:10.5},
+  {key:'3W',  name:'3 Wood',         type:'wood',   loft:15},
+  {key:'5W',  name:'5 Wood',         type:'wood',   loft:18},
+  {key:'7W',  name:'7 Wood',         type:'wood',   loft:21},
+  {key:'2H',  name:'2 Hybrid',       type:'hybrid', loft:17},
+  {key:'3H',  name:'3 Hybrid',       type:'hybrid', loft:19},
+  {key:'4H',  name:'4 Hybrid',       type:'hybrid', loft:22},
+  {key:'5H',  name:'5 Hybrid',       type:'hybrid', loft:25},
+  {key:'2i',  name:'2 Iron',         type:'iron',   loft:18},
+  {key:'3i',  name:'3 Iron',         type:'iron',   loft:21},
+  {key:'4i',  name:'4 Iron',         type:'iron',   loft:24},
+  {key:'5i',  name:'5 Iron',         type:'iron',   loft:27},
+  {key:'6i',  name:'6 Iron',         type:'iron',   loft:30.5},
+  {key:'7i',  name:'7 Iron',         type:'iron',   loft:34},
+  {key:'8i',  name:'8 Iron',         type:'iron',   loft:38},
+  {key:'9i',  name:'9 Iron',         type:'iron',   loft:42},
+  {key:'PW',  name:'Pitching Wedge', type:'wedge',  loft:46},
+  {key:'GW',  name:'Gap Wedge',      type:'wedge',  loft:50},
+  {key:'SW',  name:'Sand Wedge',     type:'wedge',  loft:54},
+  {key:'LW',  name:'Lob Wedge',      type:'wedge',  loft:58},
+  {key:'64',  name:'64 Wedge',       type:'wedge',  loft:64}
+];
+const DEFAULT_BAG = ['DR','3W','4H','5i','6i','7i','8i','9i','PW','GW','SW','LW'];
+const TYPES = ['wood','hybrid','iron','wedge'];
+
+/* ---------- REFERENCE CURVES ----------
+   Shape backbone for the model. Absolute level is irrelevant - predictions
+   scale these curves to the player via per-club ratios. [loft deg, value]. */
+const REFC = {
+  wood:  [[8,262],[10.5,252],[13,240],[15,229],[18,217],[21,207]],
+  hybrid:[[16,218],[19,208],[22,199],[25,190],[28,181]],
+  iron:  [[15,218],[18,208],[21,198],[24,188],[27,178],[30.5,167],[34,156],[38,144],[42,132],[46,120],[50,108],[54,95],[58,82],[64,68]]
+};
+const REFB = {
+  wood:  [[8,158],[10.5,155],[15,146],[18,141],[21,137]],
+  hybrid:[[16,140],[19,136],[22,133],[25,129],[28,125]],
+  iron:  [[15,140],[18,136],[21,132],[24,128],[27,123],[30.5,119],[34,114],[38,108],[42,102],[46,96],[50,90],[54,84],[58,78],[64,71]]
+};
+
+function famOf(type){ return (type==='wedge' || !REFC[type]) ? 'iron' : type; }
+function interp(pts, x){
+  const n = pts.length;
+  if(x <= pts[0][0]){
+    const a=pts[0], b=pts[1];
+    return a[1] + (x-a[0]) * (b[1]-a[1]) / (b[0]-a[0]);
+  }
+  if(x >= pts[n-1][0]){
+    const a=pts[n-2], b=pts[n-1];
+    return b[1] + (x-b[0]) * (b[1]-a[1]) / (b[0]-a[0]);
+  }
+  for(let i=1;i<n;i++){
+    if(x <= pts[i][0]){
+      const a=pts[i-1], b=pts[i];
+      return a[1] + (x-a[0]) * (b[1]-a[1]) / (b[0]-a[0]);
+    }
+  }
+  return pts[n-1][1];
+}
+function refC(type, L){ return Math.max(5, interp(REFC[famOf(type)], L)); }
+function refB(type, L){ return Math.max(20, interp(REFB[famOf(type)], L)); }
+
+const ACCENTS = [
+  {name:'Turf', hex:'#3E9B6B', chart:'#199E70'},
+  {name:'Signal', hex:'#FF6A2B', chart:'#D95926'},
+  {name:'Tracer', hex:'#4FA3FF', chart:'#3987E5'},
+  {name:'Chalk gold', hex:'#E0A83C', chart:'#C98500'}
+];
+
+/* ---------- STATE + STORAGE ---------- */
+
+const KEY = 'yb-data-v1';
+const GF_KEY = 'gf-data-v1';   /* Ground Force data - READ ONLY, never write */
+let S = null;
+let UI = { tab:'bag', sheet:null, saveT:null, tipT:null, confirm:null,
+           pred:{type:'iron', loft:21}, addType:'iron', addLoft:21, swTag:'full' };
+
+function mkClub(l){
+  return {id:l.key, key:l.key, name:l.name, type:l.type, loft:l.loft,
+          carry:null, ball:null, auto:true, readings:[]};
+}
+function defaults(){
+  return {
+    v:1,
+    settings:{ accent:'#3E9B6B', unit:'yd', sunit:'mph', win:5 },
+    bag: DEFAULT_BAG.map(k => mkClub(CLUB_LIB.find(c => c.key===k))),
+    meta:{ lastBackup:null }
+  };
+}
+
+/* forward-migrate any older stored shape; never wipe */
+function normalize(d){
+  if(!d || !d.settings || !Array.isArray(d.bag)) return defaults();
+  const base = defaults();
+  for(const k in base.settings) if(d.settings[k]===undefined) d.settings[k] = base.settings[k];
+  if(['yd','m'].indexOf(d.settings.unit)<0) d.settings.unit = 'yd';
+  if(['mph','kmh'].indexOf(d.settings.sunit)<0) d.settings.sunit = 'mph';
+  if([3,5,8].indexOf(d.settings.win)<0) d.settings.win = 5;
+  d.bag = d.bag.filter(c => c && typeof c === 'object').slice(0, 40);
+  let ctr = 0;
+  for(const c of d.bag){
+    c.id = c.id ? String(c.id).slice(0, 40) : 'n' + (ctr++) + '_' + Math.random().toString(36).slice(2,7);
+    if(typeof c.loft !== 'number' || !isFinite(c.loft)) c.loft = 30;
+    c.loft = Math.min(66, Math.max(6, c.loft));
+    if(TYPES.indexOf(c.type) < 0) c.type = 'iron';
+    c.key = c.key ? String(c.key).slice(0, 4) : '?';
+    c.name = c.name ? String(c.name).slice(0, 24) : String(c.key);
+    if(c.auto === undefined) c.auto = true;
+    c.carry = num(c.carry); c.ball = num(c.ball);
+    if(!Array.isArray(c.readings)) c.readings = [];
+    c.readings = c.readings
+      .filter(r => r && typeof r === 'object')
+      .map(r => {
+        const o = {d: typeof r.d === 'string' ? r.d.slice(0, 10) : todayISO(), c: num(r.c), b: num(r.b), s: num(r.s)};
+        if(r.sw === 'chest' || r.sw === 'hip') o.sw = r.sw;   /* wedge takeaway tag */
+        return o;
+      })
+      .filter(r => r.c !== null || r.b !== null || r.s !== null)
+      .slice(-60);
+  }
+  if(!d.meta || typeof d.meta !== 'object' || Array.isArray(d.meta)) d.meta = { lastBackup:null };
+  d.meta.rev = (typeof d.meta.rev === 'number' && isFinite(d.meta.rev)) ? d.meta.rev : 0;
+  return d;
+}
+function num(v){
+  if(v === null || v === undefined || v === '') return null;
+  const x = typeof v === 'number' ? v : parseFloat(v);
+  return isFinite(x) ? x : null;
+}
+
+let MODE = 'memory'; // local | memory
+
+function initStore(){
+  try{
+    localStorage.setItem('yb-probe','1');
+    localStorage.removeItem('yb-probe');
+    MODE = 'local';
+  }catch(e){ MODE = 'memory'; }
+}
+
+function loadData(){
+  initStore();
+  let raw = null;
+  try{ if(MODE==='local') raw = localStorage.getItem(KEY); }catch(e){ raw = null; }
+  if(raw){
+    try{
+      const parsed = JSON.parse(raw);
+      if(!parsed || !parsed.settings || !Array.isArray(parsed.bag)) throw new Error('bad shape');
+      S = normalize(parsed);
+      return;
+    }catch(e){
+      /* present but unreadable: stash the raw blob BEFORE any save can
+         overwrite it, so defaults never destroy the only copy */
+      try{
+        if(MODE==='local' && !localStorage.getItem(KEY+'-corrupt')) localStorage.setItem(KEY+'-corrupt', raw);
+      }catch(e2){}
+      setTimeout(()=>toast('Stored data was unreadable \u2014 a recovery copy was kept.'), 1600);
+    }
+  }
+  S = defaults();
+}
+
+function save(){
+  setSaveDot('saving');
+  clearTimeout(UI.saveT);
+  UI.saveT = setTimeout(()=>{
+    UI.saveT = null;
+    try{
+      S.meta.rev = (S.meta.rev||0)+1;
+      if(MODE==='local'){ localStorage.setItem(KEY, JSON.stringify(S)); }
+      else { throw new Error('no storage'); }
+      setSaveDot('saved');
+    }catch(e){ setSaveDot('err'); }
+  }, 500);
+}
+function flushSave(){
+  if(!UI.saveT) return;
+  clearTimeout(UI.saveT); UI.saveT = null;
+  try{
+    S.meta.rev = (S.meta.rev||0)+1;
+    if(MODE==='local'){ localStorage.setItem(KEY, JSON.stringify(S)); setSaveDot('saved'); }
+    else { setSaveDot('err'); }
+  }catch(e){ setSaveDot('err'); }
+}
+function setSaveDot(state){
+  const d = document.getElementById('savedot');
+  if(!d) return;
+  d.dataset.s = state;
+  d.title = state==='saved' ? 'Saved' : state==='saving' ? 'Saving\u2026' : 'Save failed \u2014 retrying on next change';
+}
+
+/* ---------- HELPERS ---------- */
+
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtDate(iso){ const p=iso.split('-'); return p.length===3 ? p[1]+'/'+p[2] : iso; }
+function median(a){
+  const s = a.slice().sort((x,y)=>x-y);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+}
+function clamp(v,lo,hi){ return Math.min(hi, Math.max(lo, v)); }
+function round1(v){ return Math.round(v*10)/10; }
+
+/* unit boundary: everything is STORED in yards + mph, converted on display/input */
+const M_PER_YD = 0.9144, KMH_PER_MPH = 1.609344;
+function d2u(yd){ return S.settings.unit==='m' ? yd*M_PER_YD : yd; }
+function u2d(v){ return S.settings.unit==='m' ? v/M_PER_YD : v; }
+function s2u(mph){ return S.settings.sunit==='kmh' ? mph*KMH_PER_MPH : mph; }
+function u2s(v){ return S.settings.sunit==='kmh' ? v/KMH_PER_MPH : v; }
+function dLab(){ return S.settings.unit==='m' ? 'm' : 'yd'; }
+function sLab(){ return S.settings.sunit==='kmh' ? 'km/h' : 'mph'; }
+function fmtD(yd){ return yd===null||yd===undefined ? '\u2014' : String(Math.round(d2u(yd))); }
+function fmtS(mph){ return mph===null||mph===undefined ? '\u2014' : String(round1(s2u(mph))); }
+function fmtLoft(L){ return (Math.round(L*2)/2) + '\u00b0'; }
+
+/* ---------- STOCK NUMBERS ---------- */
+
+function isPartial(r){ return r.sw === 'chest' || r.sw === 'hip'; }
+
+/* stock numbers are FULL-swing only; partial (chest/hip) readings feed the
+   wedge matrix via partialStock() and never touch the model */
+function stockOf(c){
+  const win = S.settings.win;
+  const out = {c:null, b:null, s:null, srcC:null, srcB:null, nC:0, nB:0, nS:0};
+  const fs = c.readings.filter(r => !isPartial(r));
+  if(c.auto !== false){
+    const cs = fs.filter(r => r.c !== null).slice(-win).map(r => r.c);
+    const bs = fs.filter(r => r.b !== null).slice(-win).map(r => r.b);
+    if(cs.length){ out.c = median(cs); out.srcC = 'auto'; out.nC = cs.length; }
+    if(bs.length){ out.b = median(bs); out.srcB = 'auto'; out.nB = bs.length; }
+  }
+  /* club speed has no manual field - always the reading median */
+  const ss = fs.filter(r => r.s !== null).slice(-win).map(r => r.s);
+  if(ss.length){ out.s = median(ss); out.nS = ss.length; }
+  if(out.c === null && c.carry !== null){ out.c = c.carry; out.srcC = 'manual'; }
+  if(out.b === null && c.ball !== null){ out.b = c.ball; out.srcB = 'manual'; }
+  return out;
+}
+
+function partialStock(c, tag){
+  const cs = c.readings.filter(r => r.sw === tag && r.c !== null).slice(-S.settings.win).map(r => r.c);
+  return cs.length ? {c: median(cs), n: cs.length} : null;
+}
+
+/* takeaway ratios: your own chest/full + hip/full medians across wedges with
+   real partial data; textbook defaults until then */
+const SW_DEFAULT = {chest: 0.80, hip: 0.60};
+function swingRatio(tag){
+  const rs = [];
+  for(const c of S.bag){
+    if(c.type !== 'wedge') continue;
+    const st = stockOf(c), p = partialStock(c, tag);
+    if(st.c !== null && st.c > 0 && p) rs.push(p.c / st.c);
+  }
+  return rs.length ? {r: clamp(median(rs), 0.3, 0.95), personal: true} : {r: SW_DEFAULT[tag], personal: false};
+}
+
+function trendOf(c){
+  const w = Math.min(3, S.settings.win);
+  const cs = c.readings.filter(r => r.c !== null && !isPartial(r)).map(r => r.c);
+  if(cs.length < 2*w) return null;
+  const d = Math.round(median(cs.slice(-w)) - median(cs.slice(-2*w, -w)));
+  return d === 0 ? null : d;
+}
+
+/* ---------- THE MODEL ----------
+   For every club with a stock number, compute the ratio of the player's number
+   to the reference curve at that loft. Fit ratio-vs-loft (slope damped until
+   there is enough data), then predict any club as ref(loft,type) x ratio(loft).
+   This keeps the physics shape (woods vs irons) even with 1-2 data points and
+   converges to the player's own curve as clubs get dialed in. */
+
+function fitRatio(pts){
+  const n = pts.length;
+  if(!n) return null;
+  let mL=0, mR=0;
+  for(const p of pts){ mL += p.L; mR += p.r; }
+  mL /= n; mR /= n;
+  let nu=0, de=0;
+  for(const p of pts){ nu += (p.L-mL)*(p.r-mR); de += (p.L-mL)*(p.L-mL); }
+  let b = (n >= 3 && de > 0) ? nu/de : 0;
+  b *= clamp((n-2)/5, 0, 1);          /* damp slope until ~7 clubs of data */
+  b = clamp(b, -0.01, 0.01);          /* cap ratio drift per degree of loft */
+  const a = mR - b*mL;
+  const lofts = pts.map(p => p.L);
+  return {
+    n, a, b,
+    lo: Math.min.apply(null, lofts),
+    hi: Math.max.apply(null, lofts),
+    f: function(L){ return clamp(a + b*L, 0.4, 1.8); }
+  };
+}
+
+function buildModel(){
+  const pc=[], pb=[];
+  for(const c of S.bag){
+    const st = stockOf(c);
+    if(st.c !== null) pc.push({L:c.loft, r: st.c / refC(c.type, c.loft), c});
+    if(st.b !== null) pb.push({L:c.loft, r: st.b / refB(c.type, c.loft), c});
+  }
+  const fc = fitRatio(pc), fb = fitRatio(pb);
+  const M = { nC: pc.length, nB: pb.length, fc, fb };
+  M.carry = (type,L) => fc ? refC(type,L) * fc.f(L) : null;
+  M.ball  = (type,L) => fb ? refB(type,L) * fb.f(L) : null;
+  let seC=0, seB=0;
+  for(const p of pc){ const e = M.carry(p.c.type, p.L) - stockOf(p.c).c; seC += e*e; }
+  for(const p of pb){ const e = M.ball(p.c.type, p.L) - stockOf(p.c).b; seB += e*e; }
+  M.rmseC = M.nC ? Math.sqrt(seC/M.nC) : 0;
+  M.rmseB = M.nB ? Math.sqrt(seB/M.nB) : 0;
+  M.extrapC = L => !!fc && (L < fc.lo-2 || L > fc.hi+2);
+  M.extrapB = L => !!fb && (L < fb.lo-2 || L > fb.hi+2);
+  M.bandC = function(L){
+    if(!fc) return null;
+    let w = Math.max(3, 1.2*M.rmseC);
+    if(M.nC===1) w = Math.max(w,9); else if(M.nC===2) w = Math.max(w,7); else if(M.nC===3) w = Math.max(w,5);
+    if(M.extrapC(L)) w *= 1.6;
+    return Math.round(w);
+  };
+  M.bandB = function(L){
+    if(!fb) return null;
+    let w = Math.max(1.5, 1.2*M.rmseB);
+    if(M.nB===1) w = Math.max(w,5); else if(M.nB===2) w = Math.max(w,4); else if(M.nB===3) w = Math.max(w,3);
+    if(M.extrapB(L)) w *= 1.5;
+    return Math.round(w);
+  };
+  return M;
+}
+
+/* ---------- GAPS ---------- */
+
+function ladder(){
+  const rows = [];
+  for(const c of S.bag){
+    const st = stockOf(c);
+    if(st.c !== null) rows.push({c, carry: st.c, ball: st.b});
+  }
+  rows.sort((a,b) => b.carry - a.carry);
+  return rows;
+}
+/* thresholds in yards */
+function gapFlag(g){ return g > 16 ? 'wide' : (g < 7 ? 'tight' : 'ok'); }
+
+function suggestFor(target, prefTypes){
+  const M = buildModel();
+  if(!M.fc) return null;
+  const fams = [['wood',8,21],['hybrid',15.5,28],['iron',17,50],['wedge',44,64]];
+  let best = null;
+  for(const f of fams){
+    for(let L=f[1]; L<=f[2]+0.001; L+=0.5){
+      const p = M.carry(f[0], L);
+      let err = Math.abs(p - target);
+      if(prefTypes && prefTypes.indexOf(f[0]) >= 0) err *= 0.8;
+      if(!best || err < best.err) best = {type:f[0], loft:Math.round(L*2)/2, carry:p, err};
+    }
+  }
+  return best;
+}
+
+/* ---------- GROUND FORCE LINK (read-only peek, same-origin only) ---------- */
+
+function gfPeek(){
+  try{
+    const raw = localStorage.getItem(GF_KEY);
+    if(!raw) return null;
+    const d = JSON.parse(raw);
+    if(!d || !d.tests) return null;
+    const n = v => { const x = parseFloat(v); return isFinite(x) && x > 40 && x < 160 ? x : null; };
+    const w0 = d.tests.w0 ? n(d.tests.w0.driver) : null;
+    const w12 = d.tests.w12 ? n(d.tests.w12.driver) : null;
+    if(w0 === null && w12 === null) return null;
+    return {w0, w12, chs: w12 !== null ? w12 : w0};
+  }catch(e){ return null; }
+}
+
+/* ---------- CLUSTER ---------- */
+
+function clusterHTML(){
+  const bag = S.bag.slice().sort((a,b) => a.loft - b.loft);
+  const dialed = bag.filter(c => stockOf(c).c !== null).length;
+  const M = buildModel();
+  let sub;
+  if(!M.fc) sub = 'NO DATA \u00b7 LOG ANY CLUB TO CALIBRATE';
+  else{
+    const mid = (M.fc.lo + M.fc.hi) / 2;
+    sub = 'MODEL \u00b7 ' + M.nC + ' CLUB' + (M.nC===1?'':'S') + ' \u00b7 \u00b1' + Math.round(d2u(M.bandC(mid))) + ' ' + dLab().toUpperCase() + (M.nC<3 ? ' \u00b7 ROUGH' : '');
+  }
+  let ticks = '';
+  for(const c of bag) ticks += '<span class="tick'+(stockOf(c).c!==null?' done':'')+'" title="'+esc(c.key)+'"></span>';
+  return '<div class="cluster">'
+    + '<div class="wk"><span class="wklab">DIALED</span><b>'+dialed+'</b><span class="of">/ '+bag.length+'</span></div>'
+    + '<div class="clmid"><div class="clblock">STOCK NUMBERS</div>'
+    + '<div class="clsub">'+sub+'</div>'
+    + '<div class="ticks">'+ticks+'</div></div>'
+    + '</div>';
+}
+
+/* ---------- BAG VIEW ---------- */
+
+function renderBag(){
+  const M = buildModel();
+  let h = clusterHTML();
+  h += '<h2 class="disp pagetitle">The Bag</h2>';
+  h += '<div class="card">';
+  const bag = S.bag.slice().sort((a,b) => a.loft - b.loft);
+  for(const c of bag){
+    const st = stockOf(c);
+    const has = st.c !== null;
+    const estC = !has && M.fc ? M.carry(c.type, c.loft) : null;
+    const estB = st.b === null && M.fb ? M.ball(c.type, c.loft) : null;
+    const tr = trendOf(c);
+    let sub = fmtLoft(c.loft) + ' \u00b7 ' + c.type;
+    const nr = c.readings.length;
+    if(nr) sub += ' \u00b7 ' + nr + ' shot' + (nr===1?'':'s');
+    if(st.srcC === 'manual') sub += ' \u00b7 manual';
+    let carryHTML, ballHTML;
+    if(has){
+      carryHTML = fmtD(st.c) + '<small>' + dLab() + '</small>';
+      ballHTML = st.b !== null ? fmtS(st.b) + ' ' + sLab() : (estB !== null ? 'est ' + fmtS(estB) + ' ' + sLab() : '');
+    } else if(estC !== null){
+      carryHTML = fmtD(estC) + '<small>' + dLab() + ' est</small>';
+      ballHTML = estB !== null ? 'est ' + fmtS(estB) + ' ' + sLab() : '';
+    } else {
+      carryHTML = '\u2014';
+      ballHTML = '';
+    }
+    if(c.type === 'wedge'){
+      const wpc = partialStock(c, 'chest'), wph = partialStock(c, 'hip');
+      if(wpc || wph) ballHTML += (ballHTML ? ' \u00b7 ' : '') + 'C ' + (wpc ? fmtD(wpc.c) : '\u2014') + ' / H ' + (wph ? fmtD(wph.c) : '\u2014');
+    }
+    const trHTML = (has && tr) ? '<span class="trend ' + (tr>0?'up':'dn') + '">' + (tr>0?'\u25b2 +':'\u25bc ') + Math.abs(Math.round(d2u(tr))) + '</span>' : '';
+    h += '<button class="bagrow' + (has?' dialed':' est') + '" data-act="club" data-id="'+esc(c.id)+'">'
+      + '<span class="tagbox">'+esc(c.key)+'</span>'
+      + '<span class="bname"><b>'+esc(c.name)+trHTML+'</b><span class="bsub">'+esc(sub)+'</span></span>'
+      + '<span class="bnum"><span class="bcarry">'+carryHTML+'</span><span class="bball">'+ballHTML+'</span></span>'
+      + '</button>';
+  }
+  h += '</div>';
+  h += '<button class="addrow" data-act="addclub">+ ADD A CLUB</button>';
+  if(M.fc && M.nC < bag.length){
+    h += '<p class="small dim" style="padding:0 2px 8px">Faint numbers are the model\u2019s estimates for clubs you haven\u2019t logged yet \u2014 tap a club to put real numbers on it.</p>';
+  }
+  h += '<div class="foot">YARDAGE BOOK \u00b7 GROUND FORCE COMPANION</div>';
+  el('view').innerHTML = h;
+}
+
+/* ---------- GAPS VIEW ---------- */
+
+function renderGaps(){
+  const rows = ladder();
+  let h = clusterHTML();
+  h += '<h2 class="disp pagetitle">Gaps</h2>';
+  if(rows.length < 2){
+    h += '<div class="card"><div class="emptychart">Log stock carry on at least two clubs and the gap map builds itself.</div></div>';
+    el('view').innerHTML = h; return;
+  }
+  const maxC = Math.max(1, rows[0].carry);
+  h += '<div class="card chartcard"><div class="charthead"><span class="eyebrow">CARRY LADDER \u00b7 '+dLab().toUpperCase()+'</span></div><div class="lad">';
+  for(let i=0;i<rows.length;i++){
+    const r = rows[i];
+    h += '<div class="ladrow"><span class="ladkey">'+esc(r.c.key)+'</span>'
+      + '<div class="ladbar"><i style="width:'+Math.max(2, Math.round(r.carry/maxC*100))+'%"></i></div>'
+      + '<span class="ladval">'+fmtD(r.carry)+'</span></div>';
+    if(i < rows.length-1){
+      const g = r.carry - rows[i+1].carry;
+      const f = gapFlag(g);
+      h += '<div class="ladgap'+(f==='ok'?'':' warn')+'"><span>\u2193 '+Math.round(d2u(g))
+        + (f==='wide' ? ' \u00b7 WIDE' : f==='tight' ? ' \u00b7 STACKED' : '')+'</span></div>';
+    }
+  }
+  h += '</div></div>';
+
+  /* gap check card */
+  h += '<div class="card pad"><div class="eyebrow">GAP CHECK</div>';
+  let flagged = 0;
+  let biggest = null;
+  for(let i=0;i<rows.length-1;i++){
+    const a = rows[i], b = rows[i+1];
+    const g = a.carry - b.carry;
+    const f = gapFlag(g);
+    if(!biggest || g > biggest.g) biggest = {a, b, g};
+    if(f === 'ok') continue;
+    flagged++;
+    h += '<div class="gaprow"><span class="gappair">'+esc(a.c.key)+' <span class="dim">\u2192</span> '+esc(b.c.key)+'</span>'
+      + '<span class="mchip warn">'+(f==='wide'?'WIDE':'STACKED')+'</span>'
+      + '<span class="gapval">'+Math.round(d2u(g))+' '+dLab()+'</span></div>';
+  }
+  if(!flagged) h += '<p class="bodytext dim">No holes \u2014 every gap is in the '+Math.round(d2u(7))+'\u2013'+Math.round(d2u(16))+' '+dLab()+' window. Tidy bag.</p>';
+  h += '</div>';
+
+  /* wedge matrix: full / chest-high / hip-high takeaway distances */
+  const wedges = S.bag.filter(c => c.type === 'wedge').sort((a,b) => a.loft - b.loft);
+  if(wedges.length){
+    const M2 = buildModel();
+    const wrc = swingRatio('chest'), wrh = swingRatio('hip');
+    h += '<div class="card pad"><div class="eyebrow">WEDGE MATRIX \u00b7 CARRY '+dLab().toUpperCase()+'</div><div class="wmx mono">'
+      + '<div class="wmxh"><span>CLUB</span><span>HIP</span><span>CHEST</span><span>FULL</span></div>';
+    for(const w of wedges){
+      const wst = stockOf(w);
+      const fullReal = wst.c !== null;
+      const full = fullReal ? wst.c : (M2.fc ? M2.carry(w.type, w.loft) : null);
+      const cell = (p, ratio) => {
+        if(p) return '<span>'+fmtD(p.c)+'</span>';
+        if(full !== null) return '<span class="west">'+fmtD(full*ratio.r)+'</span>';
+        return '<span class="west">\u2014</span>';
+      };
+      h += '<div class="wmxr"><span class="wmxc">'+esc(w.key)+' <i>'+fmtLoft(w.loft)+'</i></span>'
+        + cell(partialStock(w, 'hip'), wrh)
+        + cell(partialStock(w, 'chest'), wrc)
+        + (full !== null ? '<span'+(fullReal?'':' class="west"')+'><b>'+fmtD(full)+'</b></span>' : '<span class="west">\u2014</span>')
+        + '</div>';
+    }
+    h += '</div><p class="bodytext dim small">Hip-high and chest-high takeaway checkpoints. Faint numbers are estimates '
+      + (wrc.personal || wrh.personal ? 'built from your own takeaway ratios' : 'from standard ratios (80% chest / 60% hip) until you log partials')
+      + ' \u2014 log partial shots from a wedge\u2019s card in THE BAG.</p></div>';
+  }
+
+  /* fill-the-gap suggestion */
+  if(biggest && gapFlag(biggest.g) === 'wide'){
+    const target = (biggest.a.carry + biggest.b.carry) / 2;
+    const sug = suggestFor(target, [biggest.a.c.type, biggest.b.c.type]);
+    if(sug){
+      h += '<div class="card pad"><div class="eyebrow">FILL THE HOLE</div>'
+        + '<p class="bodytext">Biggest gap: <b class="mono">'+esc(biggest.a.c.key)+' \u2192 '+esc(biggest.b.c.key)+'</b> at <b class="mono">'
+        + Math.round(d2u(biggest.g))+' '+dLab()+'</b>. A <b>'+fmtLoft(sug.loft)+' '+esc(sug.type)+'</b> should carry about <b class="mono">'
+        + fmtD(sug.carry)+' '+dLab()+'</b> and land mid-gap.</p>'
+        + '<div class="segrow"><button class="seg" data-act="fillgap" data-t="'+esc(sug.type)+'" data-l="'+sug.loft+'">RUN IT IN PREDICT \u2192</button></div></div>';
+    }
+  }
+  el('view').innerHTML = h;
+}
+
+/* ---------- PREDICT VIEW ---------- */
+
+function renderPredict(){
+  const M = buildModel();
+  const p = UI.pred;
+  let h = clusterHTML();
+  h += '<h2 class="disp pagetitle">Predict</h2>';
+
+  h += '<div class="card pad"><div class="eyebrow">NEW CLUB</div><div class="segrow">';
+  for(const t of TYPES) h += '<button class="seg'+(p.type===t?' on':'')+'" data-act="ptype" data-t="'+t+'">'+t.toUpperCase()+'</button>';
+  h += '</div><div class="setline" style="border:0; padding-bottom:2px"><span>Loft</span><div class="stepper">'
+    + '<button class="ghost" data-act="ploft" data-d="-1">-1</button>'
+    + '<button class="ghost" data-act="ploft" data-d="-0.5">-.5</button>'
+    + '<span class="mono" style="font-size:17px; font-weight:600">'+fmtLoft(p.loft)+'</span>'
+    + '<button class="ghost" data-act="ploft" data-d="0.5">+.5</button>'
+    + '<button class="ghost" data-act="ploft" data-d="1">+1</button>'
+    + '</div></div></div>';
+
+  if(!M.fc){
+    h += '<div class="card"><div class="emptychart">The model needs at least one club with a stock carry number.<br>Go to THE BAG and log one \u2014 predictions start immediately.</div></div>';
+    el('view').innerHTML = h; return;
+  }
+
+  const pc = M.carry(p.type, p.loft);
+  const pb = M.ball(p.type, p.loft);
+  const bc = M.bandC(p.loft);
+  const bb = pb !== null ? M.bandB(p.loft) : null;
+  const ext = M.extrapC(p.loft);
+
+  h += '<div class="tiles">'
+    + '<div class="tile"><div class="tlabel">Carry</div><div class="tval">'+fmtD(pc)+'<small>'+dLab()+'</small></div>'
+    + '<div class="tsub">\u00b1'+Math.round(d2u(bc))+' '+dLab()+'</div></div>'
+    + (pb !== null
+      ? '<div class="tile"><div class="tlabel">Ball speed</div><div class="tval">'+fmtS(pb)+'<small>'+sLab()+'</small></div>'
+        + '<div class="tsub">\u00b1'+Math.round(s2u(bb))+' '+sLab()+'</div></div>'
+      : '<div class="tile ghosted"><div class="tlabel">Ball speed</div><div class="tval">\u2014</div><div class="tsub">log ball speed on any club</div></div>');
+  h += '</div>';
+
+  /* where it slots */
+  const rows = ladder();
+  let slot = '';
+  if(rows.length){
+    let above=null, below=null;
+    for(const r of rows){ if(r.carry >= pc) above = r; else { below = r; break; } }
+    if(above && below) slot = 'Slots between <b class="mono">'+esc(above.c.key)+' ('+fmtD(above.carry)+')</b> and <b class="mono">'+esc(below.c.key)+' ('+fmtD(below.carry)+')</b> \u2014 gaps of '+Math.round(d2u(above.carry-pc))+' / '+Math.round(d2u(pc-below.carry))+' '+dLab()+'.';
+    else if(above) slot = 'Shortest club in the bag \u2014 <b class="mono">'+Math.round(d2u(above.carry-pc))+' '+dLab()+'</b> under your '+esc(above.c.key)+'.';
+    else if(below) slot = 'New longest club \u2014 <b class="mono">'+Math.round(d2u(pc-below.carry))+' '+dLab()+'</b> past your '+esc(below.c.key)+'.';
+  }
+  h += '<div class="card pad"><div class="eyebrow">READ</div>';
+  if(slot) h += '<p class="bodytext">'+slot+'</p>';
+  if(p.type === 'wedge'){
+    const prc = swingRatio('chest'), prh = swingRatio('hip');
+    h += '<p class="bodytext">Takeaways: chest-high ~<b class="mono">'+fmtD(pc*prc.r)+'</b> \u00b7 hip-high ~<b class="mono">'+fmtD(pc*prh.r)+' '+dLab()+'</b>'
+      + (prc.personal || prh.personal ? ' <span class="dim small">(your ratios)</span>' : ' <span class="dim small">(standard ratios until you log partials)</span>')+'</p>';
+  }
+  h += '<p class="bodytext dim small">'
+    + (ext ? 'This loft sits outside the clubs you\u2019ve logged ('+fmtLoft(M.fc.lo)+'\u2013'+fmtLoft(M.fc.hi)+') \u2014 extrapolating, so the band is wider. '
+           : 'Interpolating inside your logged range \u2014 solid confidence. ')
+    + 'Model built on '+M.nC+' club'+(M.nC===1?'':'s')
+    + (M.nC<4 ? ' \u2014 every club you dial in tightens every prediction.' : ', fit \u00b1'+Math.round(d2u(M.rmseC*1.2))+' '+dLab()+'.')
+    + '</p></div>';
+
+  /* curve chart */
+  h += '<div class="card chartcard"><div class="charthead"><span class="eyebrow">CARRY vs LOFT \u00b7 '+esc(p.type).toUpperCase()+' LINE</span></div>'
+    + '<div class="chartwrap">'+curveChartSVG(M, p.type, p.loft)+'</div>'
+    + '<p class="small dim" style="margin:8px 4px 2px">Dots are your clubs (hollow = other families). The ring is this prediction; the shaded band is the confidence window. Tap a dot for details.</p></div>';
+
+  /* ground force engine link: gym speed (gf tests, READ ONLY) vs range reality */
+  const gf = gfPeek();
+  const drvClub = S.bag.find(c => c.type === 'wood' && c.loft < 13);
+  const dst = drvClub ? stockOf(drvClub) : null;
+  h += '<div class="card pad"><div class="eyebrow">GROUND FORCE \u00b7 ENGINE LINK</div>';
+  if(gf || (dst && (dst.b !== null || dst.s !== null))){
+    if(gf){
+      h += '<div class="wrow"><span>Test-day club speed (gym)</span><span class="mono">'
+        + (gf.w0 !== null ? fmtS(gf.w0) : '\u2014') + ' \u2192 ' + (gf.w12 !== null ? fmtS(gf.w12) : '\u2014') + ' ' + sLab()
+        + (gf.w0 !== null && gf.w12 !== null ? ' <span class="'+(gf.w12>=gf.w0?'trend up':'trend dn')+'">'+(gf.w12>gf.w0?'+':'')+round1(s2u(gf.w12-gf.w0))+'</span>' : '')
+        + '</span></div>';
+    }
+    if(dst && dst.s !== null){
+      h += '<div class="wrow"><span>Range club speed (driver, logged here)</span><span class="mono">'+fmtS(dst.s)+' '+sLab()
+        + (gf ? ' <span class="'+(dst.s>=gf.chs?'trend up':'trend dn')+'">'+(dst.s>=gf.chs?'+':'')+round1(s2u(dst.s-gf.chs))+' vs test</span>' : '')
+        + '</span></div>';
+    }
+    const chs = (dst && dst.s !== null) ? dst.s : (gf ? gf.chs : null);
+    if(chs !== null){
+      h += '<div class="wrow"><span>Ceiling ball speed @ 1.48 smash</span><span class="mono">'+fmtS(chs*1.48)+' '+sLab()+'</span></div>';
+      if(dst && dst.b !== null){
+        const smash = Math.round(dst.b/chs*100)/100;
+        h += '<div class="wrow"><span>Driver ball speed \u00b7 smash</span><span class="mono">'+fmtS(dst.b)+' '+sLab()+' \u00b7 '+smash
+          + (smash >= 1.52 ? ' <span class="mchip warn">CHECK DATA</span>'
+            : smash >= 1.46 ? ' <span class="mchip good">FLUSH</span>'
+            : smash < 1.42 ? ' <span class="mchip warn">STRIKE</span>' : '')
+          + '</span></div>';
+      }
+    }
+    h += '<p class="bodytext dim small">Every +1 '+sLab()+' of club speed the program buys you \u2248 +'+round1(d2u(u2s(2.6)))+' '+dLab()+' of driver carry potential.'
+      + ((dst && dst.s === null) ? ' Log club speed with your driver readings and this card compares gym tests to range reality automatically.' : '')
+      + '</p>';
+  } else {
+    h += '<p class="bodytext dim small">Log ball + club speed on your driver in THE BAG, or install Ground Force from the same domain \u2014 its test-day clubhead speeds land here automatically and this card becomes the gym-to-course gauge.</p>';
+  }
+  h += '</div>';
+  el('view').innerHTML = h;
+}
+
+/* carry-vs-loft chart: model line + band for the selected family, dots for
+   logged clubs, ring marker for the prediction. Single series, direct-labeled. */
+function curveChartSVG(M, fam, predLoft){
+  const RANGES = {wood:[8,22], hybrid:[15,29], iron:[16,50], wedge:[42,64]};
+  const rows = ladder();
+  const lofts = rows.map(r => r.c.loft);
+  const fr = RANGES[fam] || RANGES.iron;
+  let xLo = Math.min(fr[0], predLoft, lofts.length ? Math.min.apply(null,lofts) : fr[0]) - 2;
+  let xHi = Math.max(fr[1], predLoft, lofts.length ? Math.max.apply(null,lofts) : fr[1]) + 2;
+  xLo = clamp(Math.floor(xLo), 6, 60); xHi = clamp(Math.ceil(xHi), xLo+6, 66);
+
+  /* sample the family curve + band over the visible range */
+  const line=[], up=[], dn=[];
+  for(let L=xLo; L<=xHi+0.001; L+=1){
+    const v = M.carry(fam, L), w = M.bandC(L);
+    line.push([L,v]); up.push([L,v+w]); dn.push([L,v-w]);
+  }
+  let yLo = Infinity, yHi = -Infinity;
+  for(const pt of dn) yLo = Math.min(yLo, pt[1]);
+  for(const pt of up) yHi = Math.max(yHi, pt[1]);
+  for(const r of rows){ yLo = Math.min(yLo, r.carry); yHi = Math.max(yHi, r.carry); }
+  yLo = Math.floor((yLo-8)/10)*10; yHi = Math.ceil((yHi+8)/10)*10;
+
+  const W=340, H=210, mL=36, mR=12, mT=10, mB=24;
+  const X = L => mL + (L-xLo)/(xHi-xLo)*(W-mL-mR);
+  const Y = v => mT + (yHi-v)/(yHi-yLo)*(H-mT-mB);
+
+  let svg = '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Carry versus loft model curve">';
+
+  /* recessive grid: 3-4 y lines */
+  const step = Math.max(10, Math.ceil((yHi-yLo)/4/10)*10);
+  for(let v=Math.ceil(yLo/step)*step; v<=yHi; v+=step){
+    svg += '<line x1="'+mL+'" y1="'+Y(v)+'" x2="'+(W-mR)+'" y2="'+Y(v)+'" stroke="rgba(237,230,216,.07)" stroke-width="1"/>'
+        + '<text x="'+(mL-5)+'" y="'+(Y(v)+3)+'" text-anchor="end" font-size="9" fill="var(--faint)" font-family="Plex Mono,monospace">'+Math.round(d2u(v))+'</text>';
+  }
+  for(let L=Math.ceil(xLo/10)*10; L<=xHi; L+=10){
+    svg += '<text x="'+X(L)+'" y="'+(H-8)+'" text-anchor="middle" font-size="9" fill="var(--faint)" font-family="Plex Mono,monospace">'+L+'\u00b0</text>';
+  }
+
+  /* confidence band */
+  let band = 'M';
+  for(const pt of up) band += X(pt[0]).toFixed(1)+' '+Y(pt[1]).toFixed(1)+' L';
+  for(let i=dn.length-1;i>=0;i--) band += X(dn[i][0]).toFixed(1)+' '+Y(dn[i][1]).toFixed(1)+(i?' L':'');
+  svg += '<path d="'+band+' Z" fill="var(--chartc)" opacity=".13"/>';
+
+  /* model line */
+  let path = '';
+  for(let i=0;i<line.length;i++) path += (i?' L':'M')+X(line[i][0]).toFixed(1)+' '+Y(line[i][1]).toFixed(1);
+  svg += '<path d="'+path+'" fill="none" stroke="var(--chartc)" stroke-width="2"/>';
+
+  /* club dots: solid = same family as the line, hollow = other families */
+  for(const r of rows){
+    const same = famOf(r.c.type) === famOf(fam);
+    svg += '<circle data-act="dot" data-id="'+esc(r.c.id)+'" cx="'+X(r.c.loft).toFixed(1)+'" cy="'+Y(r.carry).toFixed(1)+'" r="4.5" '
+      + (same ? 'fill="var(--chartc)"' : 'fill="var(--panel)"')
+      + ' stroke="'+(same ? 'var(--ink)' : 'var(--chartc)')+'" stroke-width="2" style="cursor:pointer"><title>'
+      + esc(r.c.key)+' \u00b7 '+fmtLoft(r.c.loft)+' \u00b7 '+fmtD(r.carry)+' '+dLab()+'</title></circle>';
+  }
+
+  /* prediction marker */
+  const pv = M.carry(fam, predLoft);
+  svg += '<line x1="'+X(predLoft)+'" y1="'+Y(pv)+'" x2="'+X(predLoft)+'" y2="'+(H-mB)+'" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>'
+    + '<circle cx="'+X(predLoft).toFixed(1)+'" cy="'+Y(pv).toFixed(1)+'" r="5.5" fill="none" stroke="var(--accent)" stroke-width="2"/>';
+
+  svg += '</svg>';
+  return svg;
+}
+
+/* ---------- TUNE VIEW ---------- */
+
+function renderTune(){
+  const st = S.settings;
+  let h = clusterHTML();
+  h += '<h2 class="disp pagetitle">Tune</h2>';
+
+  h += '<div class="card pad"><div class="eyebrow">UNITS</div><div class="segrow">'
+    + '<button class="seg'+(st.unit==='yd'?' on':'')+'" data-act="unit" data-u="yd">YARDS</button>'
+    + '<button class="seg'+(st.unit==='m'?' on':'')+'" data-act="unit" data-u="m">METERS</button></div>'
+    + '<div class="segrow">'
+    + '<button class="seg'+(st.sunit==='mph'?' on':'')+'" data-act="sunit" data-u="mph">MPH</button>'
+    + '<button class="seg'+(st.sunit==='kmh'?' on':'')+'" data-act="sunit" data-u="kmh">KM/H</button></div></div>';
+
+  h += '<div class="card pad"><div class="eyebrow">STOCK NUMBER = MEDIAN OF LAST N SHOTS</div><div class="segrow">';
+  for(const w of [3,5,8]) h += '<button class="seg'+(st.win===w?' on':'')+'" data-act="win" data-w="'+w+'">'+w+'</button>';
+  h += '</div><p class="bodytext dim small">Per club. Median, not average \u2014 one flushed outlier or one chunk won\u2019t drag your stock number around.</p></div>';
+
+  h += '<div class="card pad"><div class="eyebrow">ACCENT</div><div class="segrow">';
+  for(const a of ACCENTS) h += '<button class="swatch'+(st.accent===a.hex?' on':'')+'" style="--sw:'+a.hex+'" data-act="accent" data-hex="'+a.hex+'" aria-label="'+a.name+'"></button>';
+  h += '</div></div>';
+
+  const bk = S.meta.lastBackup;
+  const bkTxt = bk ? 'Last backup '+Math.max(0,Math.round((Date.now()-bk)/864e5))+'d ago.' : 'No backup taken yet.';
+  h += '<div class="card pad"><div class="eyebrow">DATA</div>'
+    + '<p class="bodytext dim small">'+(MODE==='local' ? 'Saved on this device (localStorage). '+bkTxt : 'No storage available \u2014 data lives only until this tab closes.')+'</p>'
+    + '<div class="segrow"><button class="seg" data-act="export">EXPORT JSON</button><button class="seg" data-act="import">IMPORT</button></div>'
+    + '<div class="segrow"><button class="seg danger" data-act="reset">'+(UI.confirm==='reset'?'TAP AGAIN TO WIPE EVERYTHING':'RESET ALL DATA')+'</button></div></div>';
+
+  h += '<div class="card pad"><div class="eyebrow">COMPANION</div>'
+    + '<p class="bodytext dim small">Yardage Book pairs with <a href="https://benvmorse314.github.io/ground-force/" style="color:var(--accent)">Ground Force</a> \u2014 the speed you build in the gym shows up here as carry. Log range sessions after speed blocks and watch the trend arrows.</p></div>';
+
+  h += '<div class="foot">YARDAGE BOOK V1</div>';
+  el('view').innerHTML = h;
+}
+
+/* ---------- SHEETS ---------- */
+
+function openSheet(){ sheetRender(); el('sheet').classList.add('open'); el('sheetbody').focus(); }
+function closeSheet(){ UI.sheet = null; UI.confirm = null; el('sheet').classList.remove('open'); render(); }
+
+function sheetRender(){
+  if(!UI.sheet) return;
+  if(UI.sheet.k === 'club') sheetClub();
+  else if(UI.sheet.k === 'add') sheetAdd();
+}
+
+function findClub(id){ return S.bag.find(c => c.id === id) || null; }
+
+function sheetClub(){
+  const c = findClub(UI.sheet.id);
+  if(!c){ closeSheet(); return; }
+  const st = stockOf(c);
+  const M = buildModel();
+  let h = '<div class="shead"><b>'+esc(c.name)+'</b><button class="ghost" data-act="closesheet">CLOSE</button></div>';
+
+  h += '<div class="sheetsec"><div class="eyebrow">LOFT + TYPE</div>'
+    + '<div class="setline" style="border:0"><span>Loft</span><div class="stepper">'
+    + '<button class="ghost" data-act="loft" data-d="-1">-1</button>'
+    + '<button class="ghost" data-act="loft" data-d="-0.5">-.5</button>'
+    + '<span class="mono" style="font-size:16px; font-weight:600">'+fmtLoft(c.loft)+'</span>'
+    + '<button class="ghost" data-act="loft" data-d="0.5">+.5</button>'
+    + '<button class="ghost" data-act="loft" data-d="1">+1</button></div></div>'
+    + '<div class="segrow" style="padding-top:4px">';
+  for(const t of TYPES) h += '<button class="seg'+(c.type===t?' on':'')+'" data-act="ctype" data-t="'+t+'">'+t.toUpperCase()+'</button>';
+  h += '</div></div>';
+
+  h += '<div class="sheetsec"><div class="eyebrow">STOCK NUMBERS</div>'
+    + '<div class="setline"><span>Auto from readings (median of last '+S.settings.win+')</span>'
+    + '<button class="toggle'+(c.auto!==false?' on':'')+'" data-act="autostock" aria-label="Auto stock"><i></i></button></div>';
+  if(c.auto === false){
+    h += '<div class="inpair"><span class="lab">CARRY '+dLab().toUpperCase()+'</span><input class="nin" inputmode="decimal" placeholder="'+dLab()+'" value="'+(c.carry!==null?Math.round(d2u(c.carry)*10)/10:'')+'" data-act="mstockc"></div>'
+      + '<div class="inpair"><span class="lab">BALL '+sLab().toUpperCase()+'</span><input class="nin" inputmode="decimal" placeholder="'+sLab()+'" value="'+(c.ball!==null?round1(s2u(c.ball)):'')+'" data-act="mstockb"></div>';
+  } else {
+    let cur = 'Current stock: <b class="mono">'+fmtD(st.c)+' '+dLab()+'</b>';
+    if(st.b !== null) cur += ' \u00b7 <b class="mono">'+fmtS(st.b)+' '+sLab()+'</b>';
+    if(st.srcC === 'auto') cur += ' <span class="dim">(median of '+st.nC+')</span>';
+    else if(st.srcC === 'manual') cur += ' <span class="dim">(seed value)</span>';
+    else if(st.c === null && M.fc){ cur = 'No data yet. Model estimate: <b class="mono">'+fmtD(M.carry(c.type,c.loft))+' '+dLab()+'</b>'; }
+    h += '<p class="bodytext small">'+cur+'</p>';
+  }
+  if(st.s !== null){
+    let sp = 'Club speed: <b class="mono">'+fmtS(st.s)+' '+sLab()+'</b> <span class="dim">(median of '+st.nS+')</span>';
+    if(st.b !== null) sp += ' \u00b7 smash <b class="mono">'+(Math.round(st.b/st.s*100)/100)+'</b>';
+    h += '<p class="bodytext small">'+sp+'</p>';
+  }
+  if(c.type === 'wedge'){
+    const src = swingRatio('chest'), srh = swingRatio('hip');
+    const wpc = partialStock(c, 'chest'), wph = partialStock(c, 'hip');
+    const pcell = (p, ratio) => p
+      ? '<span class="mono"><b>'+fmtD(p.c)+' '+dLab()+'</b> <span class="dim">(median of '+p.n+')</span></span>'
+      : (st.c !== null ? '<span class="mono dim">~'+fmtD(st.c*ratio.r)+' '+dLab()+' est</span>' : '<span class="dim">\u2014</span>');
+    h += '<div class="wrow"><span>Chest-high takeaway</span>'+pcell(wpc, src)+'</div>'
+      + '<div class="wrow"><span>Hip-high takeaway</span>'+pcell(wph, srh)+'</div>';
+  }
+  h += '</div>';
+
+  h += '<div class="sheetsec"><div class="eyebrow">LOG A READING</div>';
+  if(c.type === 'wedge'){
+    h += '<div class="segrow" style="padding-top:8px">';
+    for(const t of [['full','FULL'],['chest','CHEST'],['hip','HIP']])
+      h += '<button class="seg'+(UI.swTag===t[0]?' on':'')+'" data-act="swtag" data-t="'+t[0]+'">'+t[1]+'</button>';
+    h += '</div>';
+  }
+  const partial = c.type === 'wedge' && UI.swTag !== 'full';
+  h += '<div class="inpair"><span class="lab">CARRY '+dLab().toUpperCase()+'</span><input class="nin" id="rc" inputmode="decimal" placeholder="'+dLab()+'"></div>';
+  if(!partial){
+    h += '<div class="inpair"><span class="lab">BALL '+sLab().toUpperCase()+'</span><input class="nin" id="rb" inputmode="decimal" placeholder="'+sLab()+' (optional)"></div>'
+      + '<div class="inpair"><span class="lab">CLUB '+sLab().toUpperCase()+'</span><input class="nin" id="rs" inputmode="decimal" placeholder="'+sLab()+' (optional)"></div>';
+  }
+  h += '<button class="bigadd" data-act="radd">'+(partial ? 'LOG '+(UI.swTag==='chest'?'CHEST':'HIP')+'-HIGH' : 'LOG IT')+'</button>'
+    + '<p class="bodytext dim small">'
+    + (partial
+      ? 'Carry for the '+UI.swTag+'-high takeaway. These build your wedge matrix \u2014 they never touch the full-swing model.'
+      : 'Punch in launch-monitor numbers after a range session. Stock updates as the median of your last '+S.settings.win+'.'
+      + (c.type === 'wedge' ? ' Switch to CHEST or HIP to log takeaway distances.' : ''))
+    + '</p></div>';
+
+  if(c.readings.length){
+    h += '<div class="sheetsec"><div class="eyebrow">READINGS \u00b7 LAST '+Math.min(10,c.readings.length)+'</div>';
+    const start = Math.max(0, c.readings.length-10);
+    for(let i=c.readings.length-1; i>=start; i--){
+      const r = c.readings[i];
+      h += '<div class="readrow"><span class="rd">'+esc(fmtDate(r.d))+(r.sw?' \u00b7 '+(r.sw==='chest'?'CH':'HP'):'')+'</span>'
+        + '<span>'+(r.c!==null?fmtD(r.c):'\u2014')+'</span>'
+        + '<span>'+(r.b!==null?fmtS(r.b):'\u2014')+(r.s!==null?'<span class="dim"> /'+Math.round(s2u(r.s))+'</span>':'')+'</span>'
+        + '<button class="rx" data-act="rdel" data-i="'+i+'" aria-label="Delete reading">\u00d7</button></div>';
+    }
+    h += '</div>';
+  }
+
+  h += '<div class="sheetsec" style="display:flex; justify-content:space-between; align-items:center">'
+    + '<input class="cin" style="max-width:60%" value="'+esc(c.name)+'" maxlength="24" data-act="cname" aria-label="Club name">'
+    + '<button class="ghost danger" data-act="crem">'+(UI.confirm==='crem'+c.id?'SURE? TAP AGAIN':'REMOVE CLUB')+'</button></div>';
+
+  el('sheetbody').innerHTML = h;
+}
+
+function sheetAdd(){
+  const have = {};
+  for(const c of S.bag) have[c.key] = 1;
+  let h = '<div class="shead"><b>Add a club</b><button class="ghost" data-act="closesheet">CLOSE</button></div>';
+  h += '<div class="subs">';
+  for(const l of CLUB_LIB){
+    if(have[l.key]) continue;
+    h += '<button class="subbtn" data-act="libadd" data-key="'+esc(l.key)+'"><span>'+esc(l.name)+'</span><span class="mono">'+fmtLoft(l.loft)+' \u00b7 '+l.type+'</span></button>';
+  }
+  h += '</div>';
+  h += '<div class="sheetsec"><div class="eyebrow">OR A CUSTOM ONE</div>'
+    + '<div class="inpair"><span class="lab">NAME</span><input class="cin" id="caddname" placeholder="e.g. Mini driver" maxlength="24"></div>'
+    + '<div class="segrow">';
+  for(const t of TYPES) h += '<button class="seg'+(UI.addType===t?' on':'')+'" data-act="addtype" data-t="'+t+'">'+t.toUpperCase()+'</button>';
+  h += '</div><div class="setline" style="border:0"><span>Loft</span><div class="stepper">'
+    + '<button class="ghost" data-act="addloft" data-d="-1">-1</button>'
+    + '<button class="ghost" data-act="addloft" data-d="-0.5">-.5</button>'
+    + '<span class="mono" style="font-size:16px; font-weight:600">'+fmtLoft(UI.addLoft)+'</span>'
+    + '<button class="ghost" data-act="addloft" data-d="0.5">+.5</button>'
+    + '<button class="ghost" data-act="addloft" data-d="1">+1</button></div></div>'
+    + '<button class="bigadd" data-act="customadd">ADD IT</button></div>';
+  el('sheetbody').innerHTML = h;
+}
+
+/* ---------- RENDER + EVENTS ---------- */
+
+function render(){
+  const t = UI.tab;
+  if(t==='bag') renderBag();
+  else if(t==='gaps') renderGaps();
+  else if(t==='predict') renderPredict();
+  else renderTune();
+  document.querySelectorAll('.tabbtn').forEach(b => b.classList.toggle('on', b.dataset.tab===t));
+}
+
+function applyAccent(){
+  const a = ACCENTS.find(x => x.hex === S.settings.accent) || ACCENTS[0];
+  document.documentElement.style.setProperty('--accent', a.hex);
+  document.documentElement.style.setProperty('--chartc', a.chart);
+  const tm = document.querySelector('meta[name="theme-color"]');
+  if(tm) tm.setAttribute('content', '#0B0A08');
+}
+
+function toast(msg, good){
+  const t = el('toast');
+  t.textContent = msg;
+  t.className = good ? 'show good' : 'show';
+  clearTimeout(UI.tipT);
+  UI.tipT = setTimeout(()=>{ t.className=''; }, 2600);
+}
+
+function parseIn(v){
+  if(v === null || v === undefined) return null;
+  const s = String(v).trim().replace(',', '.');
+  if(!s) return null;
+  const x = parseFloat(s);
+  return isFinite(x) ? x : null;
+}
+
+function handleTap(e){
+  const b = e.target.closest('[data-act]');
+  if(!b) return;
+  const act = b.dataset.act;
+  /* two-step confirms reset when you tap anything else */
+  if(UI.confirm && act !== 'crem' && act !== 'reset') UI.confirm = null;
+
+  if(act==='club'){ UI.sheet = {k:'club', id:b.dataset.id}; UI.swTag = 'full'; openSheet(); return; }
+  if(act==='addclub'){ UI.sheet = {k:'add'}; openSheet(); return; }
+  if(act==='closesheet'){ closeSheet(); return; }
+
+  const c = UI.sheet && UI.sheet.k==='club' ? findClub(UI.sheet.id) : null;
+
+  if(act==='loft' && c){ c.loft = clamp(Math.round((c.loft + parseFloat(b.dataset.d))*2)/2, 6, 66); save(); sheetRender(); return; }
+  if(act==='ctype' && c){ c.type = b.dataset.t; save(); sheetRender(); return; }
+  if(act==='autostock' && c){ c.auto = c.auto === false; save(); sheetRender(); return; }
+  if(act==='radd' && c){
+    const partial = c.type === 'wedge' && UI.swTag !== 'full';
+    const rcEl = el('rc'), rbEl = el('rb'), rsEl = el('rs');
+    const rc = parseIn(rcEl ? rcEl.value : null);
+    const rb = parseIn(rbEl ? rbEl.value : null);
+    const rs = parseIn(rsEl ? rsEl.value : null);
+    let cv = rc !== null ? u2d(rc) : null;
+    let bv = (!partial && rb !== null) ? u2s(rb) : null;
+    let sv = (!partial && rs !== null) ? u2s(rs) : null;
+    if(cv !== null && (cv < 5 || cv > 400)) { toast('That carry number looks off \u2014 check it.'); return; }
+    if(bv !== null && (bv < 20 || bv > 250)) { toast('That ball speed looks off \u2014 check it.'); return; }
+    if(sv !== null && (sv < 20 || sv > 160)) { toast('That club speed looks off \u2014 check it.'); return; }
+    if(partial && cv === null){ toast('Partial shots just need a carry.'); return; }
+    if(cv === null && bv === null && sv === null){ toast('Enter a carry, a ball speed, or a club speed.'); return; }
+    const r = {d: todayISO(), c: cv, b: bv, s: sv};
+    if(partial) r.sw = UI.swTag;
+    c.readings.push(r);
+    if(c.readings.length > 60) c.readings = c.readings.slice(-60);
+    save();
+    toast(partial ? (UI.swTag==='chest'?'Chest':'Hip')+'-high logged \u2014 matrix updated.' : 'Logged \u2014 stock updated.', true);
+    sheetRender(); return;
+  }
+  if(act==='swtag'){ UI.swTag = b.dataset.t; sheetRender(); return; }
+  if(act==='rdel' && c){ c.readings.splice(parseInt(b.dataset.i,10), 1); save(); sheetRender(); return; }
+  if(act==='crem' && c){
+    if(UI.confirm === 'crem'+c.id){
+      S.bag = S.bag.filter(x => x.id !== c.id);
+      UI.confirm = null; save(); closeSheet(); toast('Removed \u2014 its readings went with it.');
+    } else { UI.confirm = 'crem'+c.id; sheetRender(); }
+    return;
+  }
+  if(act==='libadd'){
+    const l = CLUB_LIB.find(x => x.key === b.dataset.key);
+    if(l && !S.bag.some(x => x.key === l.key)){ S.bag.push(mkClub(l)); save(); toast(l.name+' added.', true); sheetRender(); render(); }
+    return;
+  }
+  if(act==='addtype'){ UI.addType = b.dataset.t; sheetRender(); return; }
+  if(act==='addloft'){ UI.addLoft = clamp(Math.round((UI.addLoft + parseFloat(b.dataset.d))*2)/2, 6, 66); sheetRender(); return; }
+  if(act==='customadd'){
+    const nameEl = el('caddname');
+    const name = (nameEl && nameEl.value.trim()) || (fmtLoft(UI.addLoft)+' '+UI.addType);
+    const key = name.replace(/[^0-9A-Za-z]/g,'').slice(0,2).toUpperCase() || '??';
+    S.bag.push({id:'x'+Date.now().toString(36), key, name:name.slice(0,24), type:UI.addType, loft:UI.addLoft,
+                carry:null, ball:null, auto:true, readings:[]});
+    save(); closeSheet(); toast(name+' added.', true); return;
+  }
+
+  if(act==='ptype'){ UI.pred.type = b.dataset.t; render(); return; }
+  if(act==='ploft'){ UI.pred.loft = clamp(Math.round((UI.pred.loft + parseFloat(b.dataset.d))*2)/2, 6, 66); render(); return; }
+  if(act==='fillgap'){ UI.pred = {type:b.dataset.t, loft:parseFloat(b.dataset.l)}; UI.tab='predict'; render(); window.scrollTo(0,0); return; }
+  if(act==='dot'){
+    const dc = findClub(b.dataset.id);
+    if(dc){ const st = stockOf(dc); toast(dc.name+' \u00b7 '+fmtLoft(dc.loft)+' \u00b7 '+fmtD(st.c)+' '+dLab()+(st.b!==null?' \u00b7 '+fmtS(st.b)+' '+sLab():'')); }
+    return;
+  }
+
+  if(act==='unit'){ S.settings.unit = b.dataset.u; save(); render(); return; }
+  if(act==='sunit'){ S.settings.sunit = b.dataset.u; save(); render(); return; }
+  if(act==='win'){ S.settings.win = parseInt(b.dataset.w,10); save(); render(); return; }
+  if(act==='accent'){ S.settings.accent = b.dataset.hex; save(); applyAccent(); render(); return; }
+
+  if(act==='export'){
+    try{
+      const blob = new Blob([JSON.stringify(S, null, 1)], {type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'yardage-book-backup-'+todayISO()+'.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+      S.meta.lastBackup = Date.now(); save(); render();
+      toast('Backup exported.', true);
+    }catch(err){ toast('Export failed.'); }
+    return;
+  }
+  if(act==='import'){ el('importfile').click(); return; }
+  if(act==='reset'){
+    if(UI.confirm === 'reset'){
+      UI.confirm = null; S = defaults(); save(); applyAccent(); render(); toast('Fresh start.');
+    } else { UI.confirm = 'reset'; render(); }
+    return;
+  }
+}
+
+function handleInput(e){
+  const b = e.target.closest('[data-act]');
+  if(!b) return;
+  const act = b.dataset.act;
+  const c = UI.sheet && UI.sheet.k==='club' ? findClub(UI.sheet.id) : null;
+  if(act==='mstockc' && c){ const v = parseIn(b.value); c.carry = v !== null ? clamp(u2d(v), 0, 450) : null; save(); return; }
+  if(act==='mstockb' && c){ const v = parseIn(b.value); c.ball = v !== null ? clamp(u2s(v), 0, 260) : null; save(); return; }
+  if(act==='cname' && c){ c.name = b.value.slice(0,24); save(); return; }
+}
+
+/* ---------- BOOT ---------- */
+
+(function boot(){
+  loadData();
+  applyAccent();
+  render();
+  document.body.classList.add('boot');
+
+  document.body.addEventListener('click', handleTap);
+  document.body.addEventListener('input', handleInput);
+  document.querySelectorAll('.tabbtn').forEach(b => b.addEventListener('click', ()=>{ UI.tab = b.dataset.tab; UI.confirm = null; render(); }));
+  el('sheet').addEventListener('click', e => { if(e.target === el('sheet')) closeSheet(); });
+  /* keep the sheet's controls reachable above the on-screen keyboard (iOS) */
+  if(window.visualViewport){
+    const vvfit = () => {
+      const sb = el('sheetbody');
+      if(!sb) return;
+      const kb = Math.max(0, window.innerHeight - window.visualViewport.height);
+      sb.style.paddingBottom = kb ? (kb + 26) + 'px' : '';
+    };
+    window.visualViewport.addEventListener('resize', vvfit);
+  }
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && UI.sheet) closeSheet(); });
+  window.addEventListener('pagehide', flushSave);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'hidden'){ flushSave(); return; }
+    /* another tab may have written newer data */
+    try{
+      if(MODE !== 'local') return;
+      const raw = localStorage.getItem(KEY);
+      if(!raw) return;
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.meta && (parsed.meta.rev||0) > (S.meta.rev||0)){ S = normalize(parsed); render(); if(UI.sheet) sheetRender(); }
+    }catch(err){}
+  });
+  /* another same-origin window wrote newer data while we are visible */
+  window.addEventListener('storage', e => {
+    if(e.key !== KEY || !e.newValue) return;
+    try{
+      const parsed = JSON.parse(e.newValue);
+      if(parsed && parsed.meta && (parsed.meta.rev||0) > (S.meta.rev||0)){ S = normalize(parsed); render(); if(UI.sheet) sheetRender(); }
+    }catch(err){}
+  });
+
+  el('importfile').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try{
+        const parsed = JSON.parse(rd.result);
+        if(!parsed || !parsed.settings || !Array.isArray(parsed.bag)) throw new Error('not a Yardage Book backup');
+        S = normalize(parsed);
+        save(); applyAccent(); render();
+        toast('Backup imported.', true);
+      }catch(err){ toast('That file isn\u2019t a Yardage Book backup.'); }
+      e.target.value = '';
+    };
+    rd.onerror = () => { toast('Could not read that file.'); e.target.value = ''; };
+    rd.readAsText(f);
+  });
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+  }
+
+  setTimeout(()=>{ const s = el('splash'); if(s){ s.classList.add('hide'); setTimeout(()=>s.remove(), 550); } }, 650);
+})();
+</script>
+</body>
+</html>
