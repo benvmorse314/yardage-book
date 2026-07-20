@@ -192,6 +192,33 @@ h2.disp{
 .ladgap span{font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; color:var(--faint); grid-column:2; padding-left:2px}
 .ladgap.warn span{color:var(--gold)}
 
+/* ---------- practice ---------- */
+.drill{padding:15px 16px 13px; border-bottom:1px solid var(--line)}
+.drill:last-child{border-bottom:0}
+.drillhead{display:flex; align-items:baseline; gap:9px}
+.phasechip{
+  flex:none; font-family:var(--mono); font-size:8.5px; letter-spacing:.14em; padding:3px 7px;
+  border:1px solid var(--line2); color:var(--dim);
+}
+.phasechip.warm{color:var(--gold); border-color:color-mix(in srgb, var(--gold) 50%, transparent)}
+.phasechip.block{color:var(--chalk); border-color:var(--line2)}
+.phasechip.transfer{color:var(--accent); border-color:color-mix(in srgb, var(--accent) 55%, transparent)}
+.phasechip.pressure{color:var(--danger); border-color:color-mix(in srgb, var(--danger) 50%, transparent)}
+.drillhead b{flex:1; font-size:15.5px; font-weight:600; min-width:0}
+.drillmins{flex:none; font-family:var(--mono); font-size:11px; color:var(--faint); letter-spacing:.06em}
+.drillclubs{font-family:var(--mono); font-size:10.5px; color:var(--dim); letter-spacing:.05em; padding-top:5px}
+.drillhow{font-size:13.5px; color:var(--chalk); line-height:1.58; padding-top:7px}
+.drillhow .mono{font-size:12.5px}
+.drillwin{font-size:12.5px; color:var(--dim); padding-top:6px; line-height:1.5}
+.drillwin b{color:var(--turf); font-family:var(--mono); font-size:10px; letter-spacing:.12em; margin-right:6px}
+.seshrow{display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13.5px; align-items:center}
+.seshrow:last-child{border-bottom:0}
+.ptiles{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px}
+.ptile{background:var(--panel); border:1px solid var(--line); padding:11px 12px 10px}
+.ptile .tlabel{font-size:9.5px; letter-spacing:.08em; color:var(--dim); text-transform:uppercase; font-family:var(--mono)}
+.ptile .tval{font-family:var(--disp); font-size:27px; font-weight:800; line-height:1.1; padding-top:3px}
+.ptile .tval small{font-family:var(--mono); font-size:10px; font-weight:400; color:var(--dim)}
+
 /* ---------- wedge matrix ---------- */
 .wmx{padding-top:11px}
 .wmxh,.wmxr{display:grid; grid-template-columns:1.35fr 1fr 1fr 1fr; gap:8px; align-items:baseline}
@@ -371,6 +398,7 @@ body.boot #view>*:nth-child(6){animation-delay:.22s}
   <button class="tabbtn on" data-tab="bag"><svg viewBox="0 0 24 24"><rect x="7.5" y="9" width="9" height="11.5" rx="1.5"/><path d="M10 9V4.5M13.5 9l.8-5M16.5 9l1.6-4M7.5 13.5h9"/></svg><span>BAG</span></button>
   <button class="tabbtn" data-tab="gaps"><svg viewBox="0 0 24 24"><path d="M4 5h15M4 19h11M12 8.5v7M9.5 10.5L12 8l2.5 2.5M9.5 13.5L12 16l2.5-2.5"/></svg><span>GAPS</span></button>
   <button class="tabbtn" data-tab="predict"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/><circle cx="12" cy="12" r="1.1" fill="currentColor"/></svg><span>PREDICT</span></button>
+  <button class="tabbtn" data-tab="practice"><svg viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5M10 3h4M12 3v3.5M18.5 7l1.5-1.5"/></svg><span>PRACTICE</span></button>
   <button class="tabbtn" data-tab="tune"><svg viewBox="0 0 24 24"><path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></svg><span>TUNE</span></button>
 </nav>
 
@@ -572,7 +600,8 @@ const KEY = 'yb-data-v1';
 const GF_KEY = 'gf-data-v1';   /* Ground Force data - READ ONLY, never write */
 let S = null;
 let UI = { tab:'bag', sheet:null, saveT:null, tipT:null, confirm:null,
-           pred:{type:'iron', loft:21}, addType:'iron', addLoft:21, swTag:'full' };
+           pred:{type:'iron', loft:21}, addType:'iron', addLoft:21, swTag:'full',
+           pmins:30, pfocus:'irons' };
 
 function mkClub(l){
   return {id:l.key, key:l.key, name:l.name, type:l.type, loft:l.loft,
@@ -584,6 +613,7 @@ function defaults(){
     v:1,
     settings:{ accent:'#3E9B6B', unit:'yd', sunit:'mph', win:5 },
     bag: BAG_SPEC.map(mkClub),
+    practice:{ log:[], cur:null },
     meta:{ lastBackup:null }
   };
 }
@@ -620,6 +650,28 @@ function normalize(d){
       .filter(r => r.c !== null || r.b !== null || r.s !== null)
       .slice(-60);
   }
+  /* practice sessions (added v1.4) */
+  if(!d.practice || typeof d.practice !== 'object' || Array.isArray(d.practice)) d.practice = { log:[], cur:null };
+  if(!Array.isArray(d.practice.log)) d.practice.log = [];
+  d.practice.log = d.practice.log
+    .filter(e => e && typeof e === 'object')
+    .map(e => ({ d: typeof e.d === 'string' ? e.d.slice(0,10) : todayISO(),
+                 f: typeof e.f === 'string' ? e.f.slice(0,10) : 'bag',
+                 m: (function(){ const v = num(e.m); return v !== null ? clamp(v, 0, 600) : 0; })() }))
+    .slice(-200);
+  const pc = d.practice.cur;
+  if(pc && typeof pc === 'object' && typeof pc.seed === 'number' && isFinite(pc.seed) && Array.isArray(pc.plan)){
+    pc.f = typeof pc.f === 'string' ? pc.f.slice(0,10) : 'bag';
+    pc.m = (function(){ const v = num(pc.m); return v !== null ? clamp(v, 5, 600) : 30; })();
+    pc.plan = pc.plan
+      .filter(p => p && typeof p === 'object' && typeof p.id === 'string')
+      .map(p => { const o = {id:p.id.slice(0,20), mins:(function(){ const v = num(p.mins); return v !== null ? clamp(v, 1, 120) : 5; })()};
+                  if(Array.isArray(p.keys)) o.keys = p.keys.filter(k => typeof k === 'string').map(k => k.slice(0,4)).slice(0,20);
+                  return o; })
+      .filter(p => DRILLMAP[p.id] || p.id.indexOf('g_') === 0)
+      .slice(0, 8);
+    if(!pc.plan.length) d.practice.cur = null;
+  } else d.practice.cur = null;
   if(!d.meta || typeof d.meta !== 'object' || Array.isArray(d.meta)) d.meta = { lastBackup:null };
   d.meta.rev = (typeof d.meta.rev === 'number' && isFinite(d.meta.rev)) ? d.meta.rev : 0;
   /* courtesy upgrade: a pristine v1 default bag (never customized, no data) becomes the real bag */
@@ -1220,6 +1272,290 @@ function curveChartSVG(M, fam, predLoft){
   return svg;
 }
 
+/* ---------- PRACTICE (simulator sessions) ----------
+   Session science: warmup -> block (groove one thing) -> transfer (random
+   practice, what actually shows up on the course) -> pressure (a game with a
+   win condition). Drills personalize from the bag's stock numbers + wedge
+   matrix. Built for an HD Golf sim: courses, range, rough pin targets. */
+
+function mulberry(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function drillCtx(){
+  const M = buildModel();
+  const cOf = c => {
+    if(!c) return null;
+    const st = stockOf(c);
+    if(st.c !== null) return {v:st.c, est:false};
+    if(M.fc) return {v:M.carry(c.type, c.loft), est:true};
+    return null;
+  };
+  const txt = c => { const x = cOf(c); return x ? (x.est?'~':'')+fmtD(x.v) : '?'; };
+  const irons = S.bag.filter(x => x.type==='iron' && dispType(x)==='iron').sort((a,b)=>a.loft-b.loft);
+  const wedges = S.bag.filter(x => x.type==='wedge').sort((a,b)=>a.loft-b.loft);
+  const driver = S.bag.find(x => dispType(x)==='driver') || null;
+  const woods = S.bag.filter(x => (x.type==='wood' && dispType(x)!=='driver') || x.type==='hybrid' || dispType(x)==='utility').sort((a,b)=>a.loft-b.loft);
+  const mid = irons.find(x=>x.key==='7i') || irons[Math.floor(irons.length/2)] || null;
+  const shortIron = irons.length ? irons[irons.length-1] : null;
+  const scoring = irons.slice().sort((a,b)=>b.readings.length-a.readings.length)[0] || mid;
+  const sw = wedges.find(w=>Math.abs(w.loft-56)<=1) || wedges[Math.floor(wedges.length/2)] || null;
+  const ptxt = (c, tag) => {
+    if(!c) return '?';
+    const p = partialStock(c, tag);
+    if(p) return fmtD(p.c);
+    const x = cOf(c);
+    return x ? '~'+fmtD(x.v*swingRatio(tag).r) : '?';
+  };
+  const nm = c => c ? esc(c.key) : '?';
+  return {M, cOf, txt, ptxt, nm, irons, wedges, woods, driver, mid, shortIron, scoring, sw};
+}
+
+/* every drill: phase, focus tags, and how/win builders (x = ctx, rng seeded) */
+const DRILLS = [
+ {id:'w_tempo', name:'Matrix Tempo Openers', phase:'warm', focus:['any'],
+  clubs:x=>x.sw?x.sw.name:'a wedge',
+  how:(x)=>'Two balls each at hip, chest, then full swing with the '+x.nm(x.sw)+': <span class="mono">'+x.ptxt(x.sw,'hip')+' / '+x.ptxt(x.sw,'chest')+' / '+x.txt(x.sw)+' '+dLab()+'</span>. Smooth 3:1 tempo, 70% effort - you are waking up sequence, not chasing speed.',
+  win:()=>'Both full-swing balls finish within 5 '+dLab()+' of your number.'},
+ {id:'w_ramp', name:'Speed Ramp', phase:'warm', focus:['any'],
+  clubs:x=>x.mid?x.mid.name:'mid iron',
+  how:(x)=>{ const st = x.mid?stockOf(x.mid):null; return 'Three balls at 60%, three at 80%, three at 95% with the '+x.nm(x.mid)+'. Watch ball speed climb on the monitor'+(st&&st.b!==null?' toward your stock <span class="mono">'+fmtS(st.b)+' '+sLab()+'</span>':'')+'. Never jump a step.'; },
+  win:()=>'The 95% balls fly straighter than the 60% ones. If not, tempo is off - restart the ramp.'},
+ {id:'w_gate', name:'Start-Line Gate', phase:'warm', focus:['any'],
+  clubs:x=>x.shortIron?x.shortIron.name:'short iron',
+  how:(x)=>'Pick one flag on the sim range. Six balls with the '+x.nm(x.shortIron)+' - every ball must START on the flag line (watch the trace, not the finish).',
+  win:()=>'4 of 6 start on line. Start line is the cheapest fix in golf.'},
+ {id:'b_window', name:'Three Windows', phase:'block', focus:['irons','bag'],
+  clubs:x=>x.mid?x.mid.name:'mid iron',
+  how:(x)=>'Same club, three flights: 3 low punches, 3 stock, 3 high. On HD Golf watch apex height separate into three clear tiers. Ball position + shaft lean, not effort.',
+  win:()=>'Three visibly different apex heights with carry inside 10 '+dLab()+' of each other on the stock balls.'},
+ {id:'b_ladder', name:'Full Matrix Ladder', phase:'block', focus:['wedges','bag'],
+  clubs:x=>x.wedges.map(w=>w.key).join(' / ')||'wedges',
+  how:(x)=>{ let rows = x.wedges.map(w=>'<span class="mono">'+x.nm(w)+' '+x.ptxt(w,'hip')+' / '+x.ptxt(w,'chest')+' / '+x.txt(w)+'</span>').join(' &middot; '); return 'One ball per cell, climbing the ladder: hip, chest, full on each wedge. Your matrix: '+rows+' '+dLab()+'. This IS your scoring game.'; },
+  win:()=>'Every cell within 6 '+dLab()+' of its number. Log any takeaway carries that surprised you.'},
+ {id:'b_oneclub3', name:'One Club, Three Speeds', phase:'block', focus:['wedges'],
+  clubs:(x,rng)=>{ const w = x.wedges.length?x.wedges[Math.floor(rng()*x.wedges.length)]:null; return w?w.name:'a wedge'; },
+  how:(x,rng)=>{ const w = x.wedges.length?x.wedges[Math.floor(rng()*x.wedges.length)]:null; return 'Four balls each at hip <span class="mono">'+x.ptxt(w,'hip')+'</span>, chest <span class="mono">'+x.ptxt(w,'chest')+'</span>, full <span class="mono">'+x.txt(w)+' '+dLab()+'</span> with the '+x.nm(w)+'. Backswing length sets distance - the tempo never changes.'; },
+  win:()=>'3 of 4 at each window within 5 '+dLab()+'.'},
+ {id:'b_shape', name:'Corridor Curves', phase:'block', focus:['driver','bag'],
+  clubs:x=>x.driver?x.driver.name:'driver',
+  how:()=>'Five stock drives, then five with your go-to shape (pick ONE - the fairway finder you trust). Same start-line corridor for all ten; only the curve changes.',
+  win:()=>'The shaped five finish on the same side every time. A one-way miss is a weapon.'},
+ {id:'b_gappair', name:'Gap Check Pair', phase:'block', focus:['irons','bag'],
+  clubs:x=>{ const two = S.bag.slice().sort((a,b)=>a.readings.length-b.readings.length||a.loft-b.loft).slice(0,2); return two.map(c=>c.name).join(' + '); },
+  how:(x)=>{ const two = S.bag.slice().sort((a,b)=>a.readings.length-b.readings.length||a.loft-b.loft).slice(0,2); return 'Your two least-logged clubs: '+two.map(c=>x.nm(c)+' (model says <span class="mono">'+x.txt(c)+' '+dLab()+'</span>)').join(' and ')+'. Five balls each, full routine. Does reality match the model?'; },
+  win:()=>'AFTER: open both clubs in THE BAG and log the median - every logged club tightens every prediction.'},
+ {id:'t_random18', name:'Random Nine', phase:'transfer', focus:['bag','irons','driver'],
+  clubs:()=>'whole bag',
+  how:(x,rng)=>{
+    const pool = S.bag.filter(c=>x.cOf(c));
+    if(pool.length<3) return 'Nine shots, no two in a row with the same club. Full pre-shot routine on every ball - this is the practice that transfers to the course.';
+    let seq=[], last=null;
+    for(let i=0;i<9;i++){
+      let c; let guard=0;
+      do{ c = pool[Math.floor(rng()*pool.length)]; guard++; }while(c===last && guard<9);
+      last=c;
+      seq.push(x.nm(c)+' '+(dispType(c)==='driver'?'fairway':x.txt(c)));
+    }
+    return 'One ball each, full routine, in this order: <span class="mono">'+seq.join(' &middot; ')+'</span>. Never two swings with the same club - decide, commit, hit.';
+  },
+  win:()=>'6 of 9 you would accept on the course. Honest count.'},
+ {id:'t_numberhunt', name:'Number Hunt', phase:'transfer', focus:['irons','wedges','bag'],
+  clubs:()=>'you choose - that is the drill',
+  how:(x,rng)=>{
+    let lo=55, hi=190;
+    const wLo = x.wedges.length?x.cOf(x.wedges[x.wedges.length-1]):null;
+    const iHi = x.irons.length?x.cOf(x.irons[0]):null;
+    if(wLo) lo=Math.round(wLo.v*0.6); if(iHi) hi=Math.round(iHi.v);
+    const nums=[]; for(let i=0;i<6;i++) nums.push(Math.round((lo+rng()*(hi-lo))/5)*5);
+    return 'The app calls a number, you pick the club AND the swing to match it: <span class="mono">'+nums.map(n=>fmtD(n)).join(' &middot; ')+' '+dLab()+'</span>. Two balls per number.';
+  },
+  win:()=>'One of the two balls within 5 '+dLab()+' on at least 4 numbers.'},
+ {id:'t_approach', name:'Scoring Windows', phase:'transfer', focus:['irons','bag'],
+  clubs:x=>[x.shortIron,x.mid,x.irons[0]].filter(Boolean).map(c=>c.key).join(' / ')||'irons',
+  how:(x)=>'Set three pins (or pick three flags) at your numbers: <span class="mono">'+[x.shortIron,x.mid,x.irons[0]].filter(Boolean).map(c=>x.nm(c)+' '+x.txt(c)).join(' &middot; ')+' '+dLab()+'</span>. Rotate every shot - never the same target twice in a row. Twelve balls.',
+  win:()=>'8 of 12 pin-high (carry within 6 '+dLab()+'). Pin-high is the tour stat that matters.'},
+ {id:'t_wroulette', name:'Wedge Roulette', phase:'transfer', focus:['wedges','bag'],
+  clubs:()=>'all wedges',
+  how:(x,rng)=>{
+    let hi=110; const pw=x.wedges.length?x.cOf(x.wedges[0]):null; if(pw) hi=Math.round(pw.v);
+    const nums=[]; for(let i=0;i<8;i++) nums.push(Math.round((40+rng()*(hi-40))/2)*2);
+    return 'Eight random part-shot numbers: <span class="mono">'+nums.map(n=>fmtD(n)).join(' &middot; ')+' '+dLab()+'</span>. Any wedge, any takeaway - use your matrix to pick, one ball each.';
+  },
+  win:()=>'5 of 8 within 6 '+dLab()+'. This is where handicaps fall.'},
+ {id:'t_teealt', name:'Nine Tee Balls', phase:'transfer', focus:['driver','bag'],
+  clubs:x=>[x.driver,x.woods[0],x.woods[1]].filter(Boolean).map(c=>c.key).join(' / ')||'tee clubs',
+  how:(x)=>'Imagine nine different holes: tight, wide, dogleg. Rotate '+[x.driver,x.woods[0],x.woods[1]].filter(Boolean).map(c=>x.nm(c)).join(', ')+' by what the hole demands, not by habit. Call the shot out loud before each swing.',
+  win:()=>'7 of 9 in a 35 '+dLab()+' wide fairway corridor.'},
+ {id:'t_course3', name:'Three Real Holes', phase:'transfer', focus:['bag'],
+  clubs:()=>'whole bag', minTotal:45,
+  how:()=>'Load a course on the sim and play three holes with ONE ball - no mulligans, full routine, hole everything out mentally (inside 8 feet counts as made). Card the score.',
+  win:()=>'Bogey or better on all three. Playing golf beats hitting balls.'},
+ {id:'p_corridor', name:'Corridor 10', phase:'pressure', focus:['irons'],
+  clubs:x=>x.scoring?x.scoring.name:'scoring iron',
+  how:(x)=>'Ten balls with the '+x.nm(x.scoring)+'. A ball scores only if carry is within 7 '+dLab()+' of <span class="mono">'+x.txt(x.scoring)+' '+dLab()+'</span> AND it starts on your line.',
+  win:()=>'7 of 10 score = pass. Write the number down - beat it next session.'},
+ {id:'p_ladderfin', name:'Ladder Finisher', phase:'pressure', focus:['wedges'],
+  clubs:x=>x.sw?x.sw.name:'sand wedge',
+  how:(x)=>'Hip <span class="mono">'+x.ptxt(x.sw,'hip')+'</span>, chest <span class="mono">'+x.ptxt(x.sw,'chest')+'</span>, full <span class="mono">'+x.txt(x.sw)+' '+dLab()+'</span> - in order, each within 5 '+dLab()+'. Miss two in a row and the ladder resets to hip.',
+  win:()=>'Complete the ladder twice. Do not leave until you do.'},
+ {id:'p_fairway', name:'Fairway Finder 10', phase:'pressure', focus:['driver','bag'],
+  clubs:x=>x.driver?x.driver.name:'driver',
+  how:()=>'Ten drives at a 35 '+dLab()+' corridor (two flags or the sim fairway). Count fairways. No rehearsal swings after ball five - just like the back nine.',
+  win:()=>'Beat your last count. First time? 6 of 10 is the bar.'},
+ {id:'p_3club', name:'Three-Club Gauntlet', phase:'pressure', focus:['bag'],
+  clubs:(x,rng)=>{ const picks=[x.woods[Math.floor(rng()*Math.max(1,x.woods.length))]||x.driver, x.irons[Math.floor(rng()*Math.max(1,x.irons.length))], x.wedges[Math.floor(rng()*Math.max(1,x.wedges.length))]].filter(Boolean); return picks.map(c=>c.name).join(' + ')||'3 clubs'; },
+  how:(x,rng)=>{ const picks=[x.woods[Math.floor(rng()*Math.max(1,x.woods.length))]||x.driver, x.irons[Math.floor(rng()*Math.max(1,x.irons.length))], x.wedges[Math.floor(rng()*Math.max(1,x.wedges.length))]].filter(Boolean); return 'Play one sim hole (or imagine a 400 '+dLab()+' par 4 on the range) using ONLY '+picks.map(c=>x.nm(c)).join(', ')+'. Creativity under constraint builds real scoring skill.'; },
+  win:()=>'Par or better, twice.'},
+ {id:'p_shrink', name:'Shrinking Target', phase:'pressure', focus:['irons','wedges'],
+  clubs:x=>x.scoring?x.scoring.name:'scoring club',
+  how:(x)=>'Start with a 15 '+dLab()+' window around <span class="mono">'+x.txt(x.scoring)+' '+dLab()+'</span>. Hit it: window shrinks by 3. Miss: grows by 3. You are done when you hit a 6 '+dLab()+' window.',
+  win:()=>'Reach the 6 '+dLab()+' window inside 12 balls.'},
+ {id:'p_streak', name:'Streak Builder', phase:'pressure', focus:['irons','bag'],
+  clubs:x=>x.scoring?x.scoring.name:'scoring iron',
+  how:(x)=>'Consecutive balls within 6 '+dLab()+' of <span class="mono">'+x.txt(x.scoring)+' '+dLab()+'</span> with the '+x.nm(x.scoring)+'. A miss resets the streak to zero. Cap: 15 balls.',
+  win:()=>'A streak of 4 ends the session on a win - walk away immediately.'},
+ {id:'p_startline', name:'Tee Box Test', phase:'pressure', focus:['driver'],
+  clubs:x=>x.driver?x.driver.name:'driver',
+  how:()=>'Six drives: two starting left edge, two center, two right edge of the corridor - called in advance. HD Golf trace is the judge.',
+  win:()=>'4 of 6 start where you called them.'}
+];
+const DRILLMAP = {};
+for(const d of DRILLS) DRILLMAP[d.id] = d;
+
+const PHASE_LABEL = {warm:'WARM-UP', block:'BLOCK', transfer:'TRANSFER', pressure:'PRESSURE'};
+const FOCI = [['irons','IRONS'],['wedges','WEDGES'],['driver','DRIVER'],['bag','FULL BAG'],['gap','GAPPING']];
+
+function planSession(focus, mins, seed){
+  const rng = mulberry(seed);
+  if(focus === 'gap') return planGapping(mins);
+  const plan = [], used = {};
+  const pick = (phase, budget) => {
+    const pool = DRILLS.filter(d => d.phase===phase && !used[d.id]
+      && (d.focus.indexOf(focus)>=0 || d.focus.indexOf('any')>=0)
+      && (!d.minTotal || mins >= d.minTotal));
+    if(!pool.length || budget < 3) return;
+    const d = pool[Math.floor(rng()*pool.length)];
+    used[d.id] = 1;
+    plan.push({id:d.id, mins:budget});
+  };
+  const warm = clamp(Math.round(mins*0.15), 3, 10);
+  const press = clamp(Math.round(mins*0.25), 5, 22);
+  const block = mins >= 30 ? clamp(Math.round(mins*0.22), 8, 20) : 0;
+  const transfer = mins - warm - press - block;
+  pick('warm', warm);
+  if(block) pick('block', block);
+  if(transfer >= 24){ const t1 = Math.round(transfer/2); pick('transfer', t1); pick('transfer', transfer - t1); }
+  else pick('transfer', transfer);
+  pick('pressure', press);
+  return plan;
+}
+
+function planGapping(mins){
+  /* data day: least-logged clubs first, ~4 min per club */
+  const nClubs = clamp(Math.floor((mins - 8) / 4), 3, S.bag.length);
+  const keys = S.bag.slice()
+    .sort((a,b) => a.readings.length - b.readings.length || a.loft - b.loft)
+    .slice(0, nClubs).sort((a,b) => b.loft - a.loft).map(c => c.key);
+  const plan = [{id:'g_warm', mins:5}, {id:'g_clubs', mins:nClubs*4, keys}];
+  if(mins >= 60 && S.bag.some(c => c.type==='wedge')) plan.push({id:'g_partials', mins:10});
+  plan.push({id:'g_log', mins:3});
+  return plan;
+}
+
+function gapDrillHTML(p, x){
+  if(p.id === 'g_warm') return drillHTML('warm', 'Ramp Up', p.mins, 'any club',
+    'Eight easy balls building to full speed. No data yet - just wake the body up.', null);
+  if(p.id === 'g_clubs'){
+    const rows = (p.keys||[]).map(k => { const c = S.bag.find(b=>b.key===k); return c ? '<span class="mono">'+esc(c.key)+' ('+x.txt(c)+')</span>' : ''; }).filter(Boolean).join(' &middot; ');
+    return drillHTML('block', 'Gapping Circuit', p.mins, (p.keys||[]).length + ' clubs, shortest first',
+      'Six balls per club, full routine every ball: '+rows+' '+dLab()+'. Throw out the best and the worst; remember the middle.',
+      'These are your least-logged clubs - today they become real numbers.');
+  }
+  if(p.id === 'g_partials') return drillHTML('block', 'Wedge Partials Pass', p.mins, 'two wedges',
+    'Four balls hip-high, four chest-high on your two least-mapped wedges. This fills the wedge matrix.', null);
+  if(p.id === 'g_log') return drillHTML('pressure', 'Bank The Data', p.mins, 'phone',
+    'Open each club in THE BAG and log the median carry + ball speed (+ club speed if shown) while it is fresh.',
+    'Every number you log tightens every prediction in the app.');
+  return '';
+}
+
+function drillHTML(phase, name, mins, clubs, how, win){
+  return '<div class="drill">'
+    + '<div class="drillhead"><span class="phasechip '+phase+'">'+PHASE_LABEL[phase]+'</span><b>'+name+'</b><span class="drillmins">'+mins+' MIN</span></div>'
+    + '<div class="drillclubs">'+clubs.toUpperCase()+'</div>'
+    + '<div class="drillhow">'+how+'</div>'
+    + (win ? '<div class="drillwin"><b>WIN</b>'+win+'</div>' : '')
+    + '</div>';
+}
+
+function renderPractice(){
+  const P = S.practice;
+  let h = clusterHTML();
+  h += '<h2 class="disp pagetitle">Practice</h2>';
+
+  /* builder */
+  h += '<div class="card pad"><div class="eyebrow">SESSION BUILDER</div>'
+    + '<div class="segrow">';
+  for(const m of [15,30,45,60,90]) h += '<button class="seg'+(UI.pmins===m?' on':'')+'" data-act="pmins" data-m="'+m+'">'+m+'\u2032</button>';
+  h += '</div><div class="segrow">';
+  for(const f of FOCI) h += '<button class="seg'+(UI.pfocus===f[0]?' on':'')+'" data-act="pfocus" data-f="'+f[0]+'">'+f[1]+'</button>';
+  h += '</div>'
+    + (UI.pfocus==='gap' ? '<p class="bodytext dim small">Gapping day: a data-collection session. The app picks your least-logged clubs and you turn them into real stock numbers.</p>' : '')
+    + '<button class="bigadd" data-act="pbuild">'+(P.cur?'REBUILD (NEW DRILLS)':'BUILD MY SESSION')+'</button></div>';
+
+  const M = buildModel();
+  if(!M.fc && UI.pfocus!=='gap' && !P.cur){
+    h += '<div class="card pad"><p class="bodytext dim small">No stock numbers yet, so drills will show ? instead of your carries. Tip: run a GAPPING session first - 30 minutes and the whole app comes alive.</p></div>';
+  }
+
+  /* current session */
+  if(P.cur){
+    const x = drillCtx();
+    const fLab = (FOCI.find(f=>f[0]===P.cur.f)||['','SESSION'])[1];
+    const total = P.cur.plan.reduce((a,p)=>a+p.mins,0);
+    h += '<div class="card"><div class="charthead" style="padding:15px 16px 4px"><span class="eyebrow">'+fLab+' \u00b7 '+P.cur.m+' MIN (\u2248'+total+' PLANNED)</span></div>';
+    P.cur.plan.forEach((p, i) => {
+      if(p.id.charAt(0)==='g' && p.id.charAt(1)==='_'){ h += gapDrillHTML(p, x); return; }
+      const d = DRILLMAP[p.id];
+      if(!d) return;
+      const rng = mulberry(P.cur.seed + i*7919);
+      const rng2 = mulberry(P.cur.seed + i*7919);   /* clubs + how must agree on picks */
+      h += drillHTML(d.phase, d.name, p.mins, String(d.clubs(x, rng2)), d.how(x, rng), d.win ? d.win(x) : null);
+    });
+    h += '</div>'
+      + '<button class="bigadd" data-act="pdone">MARK SESSION DONE</button>'
+      + '<div class="segrow" style="padding-top:2px"><button class="ghost" data-act="pdisc" style="flex:1; text-align:center">DISCARD SESSION</button></div>';
+  }
+
+  /* history */
+  const now = Date.now(), day = 864e5;
+  const within = days => P.log.filter(e => { const t = new Date(e.d+'T12:00:00').getTime(); return isFinite(t) && now - t < days*day; });
+  const wk = within(7).length, mins30 = within(30).reduce((a,e)=>a+e.m,0);
+  h += '<div class="ptiles">'
+    + '<div class="ptile"><div class="tlabel">This week</div><div class="tval">'+wk+'<small> sesh</small></div></div>'
+    + '<div class="ptile"><div class="tlabel">Last 30 days</div><div class="tval">'+mins30+'<small> min</small></div></div>'
+    + '<div class="ptile"><div class="tlabel">All time</div><div class="tval">'+P.log.length+'<small> sesh</small></div></div>'
+    + '</div>';
+  if(P.log.length){
+    h += '<div class="card pad"><div class="eyebrow">RECENT SESSIONS</div>';
+    const recent = P.log.slice(-8).reverse();
+    for(const e of recent){
+      const fLab = (FOCI.find(f=>f[0]===e.f)||[,e.f])[1] || e.f;
+      h += '<div class="seshrow"><span>'+esc(fmtDate(e.d))+' \u00b7 '+esc(String(fLab))+'</span><span class="mono dim">'+e.m+' min</span></div>';
+    }
+    h += '</div>';
+  }
+  h += '<div class="foot">RANDOM PRACTICE WINS \u00b7 PRESSURE MAKES IT STICK</div>';
+  el('view').innerHTML = h;
+}
+
 /* ---------- TUNE VIEW ---------- */
 
 function renderTune(){
@@ -1417,6 +1753,7 @@ function render(){
   if(t==='bag') renderBag();
   else if(t==='gaps') renderGaps();
   else if(t==='predict') renderPredict();
+  else if(t==='practice') renderPractice();
   else renderTune();
   document.querySelectorAll('.tabbtn').forEach(b => b.classList.toggle('on', b.dataset.tab===t));
 }
@@ -1525,6 +1862,26 @@ function handleTap(e){
     return;
   }
 
+  if(act==='pmins'){ UI.pmins = parseInt(b.dataset.m,10); render(); return; }
+  if(act==='pfocus'){ UI.pfocus = b.dataset.f; render(); return; }
+  if(act==='pbuild'){
+    const seed = Math.floor(Math.random()*2147483647);
+    const plan = planSession(UI.pfocus, UI.pmins, seed);
+    if(!plan.length){ toast('Could not build a plan - add some clubs first.'); return; }
+    S.practice.cur = { f:UI.pfocus, m:UI.pmins, seed, plan };
+    save(); render(); window.scrollTo(0,0); return;
+  }
+  if(act==='pdone'){
+    const cur = S.practice.cur;
+    if(!cur) return;
+    S.practice.log.push({ d:todayISO(), f:cur.f, m:cur.m });
+    if(S.practice.log.length > 200) S.practice.log = S.practice.log.slice(-200);
+    S.practice.cur = null;
+    save(); render();
+    toast(cur.f==='gap' ? 'Session logged - now bank those medians in THE BAG.' : 'Session logged. Speed built, numbers banked.', true);
+    return;
+  }
+  if(act==='pdisc'){ S.practice.cur = null; save(); render(); return; }
   if(act==='unit'){ S.settings.unit = b.dataset.u; save(); render(); return; }
   if(act==='sunit'){ S.settings.sunit = b.dataset.u; save(); render(); return; }
   if(act==='win'){ S.settings.win = parseInt(b.dataset.w,10); save(); render(); return; }
