@@ -284,13 +284,26 @@ h2.disp{
 .cin{flex:1; height:48px; border:1px solid var(--line2); background:var(--ink); padding:0 13px; font-size:16px; min-width:0}
 .cin:focus{border-color:var(--accent); outline:none}
 .modelsel{
-  flex:1; width:100%; height:48px; min-width:0; border:1px solid var(--line2); background:var(--ink); color:var(--chalk);
-  font-family:var(--sans); font-size:15px; padding:0 34px 0 12px; -webkit-appearance:none; appearance:none;
+  width:100%; height:48px; min-width:0; border:1px solid var(--line2); background:var(--ink); color:var(--chalk);
+  font-family:var(--sans); font-size:16px; padding:0 34px 0 12px; -webkit-appearance:none; appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23A69C89' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat:no-repeat; background-position:right 12px center;
 }
 .modelsel:focus{border-color:var(--accent); outline:none}
+.modelsel[disabled]{color:var(--faint); border-color:var(--line)}
 .modelsel option,.modelsel optgroup{background:var(--panel); color:var(--chalk)}
+.eqrow{padding:16px 0}
+.eqrow + .eqrow{border-top:1px solid var(--line)}
+.eqlab{display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding-bottom:8px}
+.eqlab label,.eqlab .eqn{font-family:var(--mono); font-size:10px; letter-spacing:.08em; color:var(--dim)}
+.eqlab .eqn{letter-spacing:.06em}
+/* a verb, not a toggle - matches .bigadd's one-shot-action treatment */
+.eqgo{width:100%; margin-top:10px; border-color:color-mix(in srgb, var(--accent) 55%, transparent); color:var(--accent)}
+.eqgo:active:not([disabled]){background:var(--accent); color:var(--ink)}
+.eqgo[disabled]{opacity:1; color:var(--faint); border-color:var(--line); cursor:default}
+.eqgo.armed{background:var(--accent); border-color:var(--accent); color:var(--ink); font-weight:600; letter-spacing:.04em}
+.inpair.stack{display:block}
+.inpair.stack .lab{width:auto; display:block; padding-bottom:8px}
 .inpair{display:flex; gap:9px; padding-top:11px; align-items:center}
 .inpair .lab{flex:none; width:86px; font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; color:var(--dim); text-transform:uppercase}
 .bigadd{
@@ -454,9 +467,9 @@ const BAG_SPEC = [
   {key:'8i', name:'8 Iron',         type:'iron',  loft:38,   head:'Takomo 201T mkII'},
   {key:'9i', name:'9 Iron',         type:'iron',  loft:42,   head:'Takomo 201T mkII'},
   {key:'PW', name:'Pitching Wedge', type:'wedge', loft:46,   head:'Takomo 201T mkII'},
-  {key:'52', name:'52 Wedge',       type:'wedge', loft:52},
-  {key:'56', name:'56 Wedge',       type:'wedge', loft:56},
-  {key:'60', name:'60 Wedge',       type:'wedge', loft:60}
+  {key:'52', name:'52 Wedge',       type:'wedge', loft:52,   head:'Takomo SF2'},
+  {key:'56', name:'56 Wedge',       type:'wedge', loft:56,   head:'Takomo SF2'},
+  {key:'60', name:'60 Wedge',       type:'wedge', loft:60,   head:'Takomo SF2'}
 ];
 /* pristine v1 default - a bag matching this exactly (untouched, no data) auto-upgrades to BAG_SPEC */
 const LEGACY_KEYS = ['3W','4H','5i','6i','7i','8i','9i','DR','GW','LW','PW','SW'];
@@ -507,17 +520,140 @@ const IRON_MODELS = [
 ];
 const WOOD_LOFTS   = {'DR':10.5,'2W':13,'3W':15,'4W':16.5,'5W':18,'7W':21,'9W':24,'11W':27};
 const HYBRID_LOFTS = {'1H':16,'2H':17,'3H':19,'4H':22,'5H':25,'6H':28,'7H':31};
-function ironModelLabel(m){ return m.brand + ' ' + m.model; }
-const CORE_IRONS = ['4i','5i','6i','7i','8i','9i','PW'];
 
-/* grouped <option>s for a model picker; preselect the one matching selHead */
-function ironModelOptions(selHead, placeholder){
+/* Wood + wedge families. These set the HEAD only - wood lofts come off an
+   adjustable hosel and wedge lofts are stamped on the sole, so neither is
+   safe to overwrite from a table the way iron-set lofts are. */
+const WOOD_MODELS = [
+  {brand:'Callaway',  model:'Elyte'},
+  {brand:'Callaway',  model:'Paradym Ai Smoke'},
+  {brand:'Callaway',  model:'Paradym'},
+  {brand:'Callaway',  model:'Rogue ST'},
+  {brand:'Cobra',     model:'Darkspeed'},
+  {brand:'Cobra',     model:'Aerojet'},
+  {brand:'Mizuno',    model:'ST-Z'},
+  {brand:'Ping',      model:'G440'},
+  {brand:'Ping',      model:'G430'},
+  {brand:'Ping',      model:'G425'},
+  {brand:'Srixon',    model:'ZX Mk II'},
+  {brand:'TaylorMade',model:'Qi35'},
+  {brand:'TaylorMade',model:'Qi10'},
+  {brand:'TaylorMade',model:'Stealth 2'},
+  {brand:'TaylorMade',model:'SIM2'},
+  {brand:'Titleist',  model:'GT2'},
+  {brand:'Titleist',  model:'GT3'},
+  {brand:'Titleist',  model:'TSR2'},
+  {brand:'Titleist',  model:'TSR3'}
+];
+const WEDGE_MODELS = [
+  {brand:'Takomo',    model:'SF2'},
+  {brand:'Callaway',  model:'Opus'},
+  {brand:'Callaway',  model:'Jaws Raw'},
+  {brand:'Cleveland', model:'RTX 6 ZipCore'},
+  {brand:'Cleveland', model:'CBX 4'},
+  {brand:'Cobra',     model:'Snakebite'},
+  {brand:'Mizuno',    model:'T24'},
+  {brand:'Mizuno',    model:'T22'},
+  {brand:'Ping',      model:'Glide 4.0'},
+  {brand:'Srixon',    model:'ZipCore'},
+  {brand:'TaylorMade',model:'MG4'},
+  {brand:'TaylorMade',model:'MG3'},
+  {brand:'Titleist',  model:'Vokey SM10'},
+  {brand:'Titleist',  model:'Vokey SM9'}
+];
+function ironModelLabel(m){ return m.brand + ' ' + m.model; }
+function gearLabel(m){ return m.brand + ' ' + m.model; }
+const CORE_IRONS = ['4i','5i','6i','7i','8i','9i','PW'];
+/* Category membership is decided by SLOT, never by loft. Loft is user-editable,
+   so a loft rule let a PW bent to 48 sit in two categories at once and a wedge
+   bent to 47.5 sit in none. Slot is stable: the 4i-PW slots are the iron set,
+   every other wedge is a specialty wedge. */
+function isSetSlot(c){ return CORE_IRONS.indexOf(c.key) >= 0; }
+function gearTargets(cat){
+  if(cat === 'wood')  return S.bag.filter(c => c.type === 'wood' || c.type === 'hybrid');
+  if(cat === 'wedge') return S.bag.filter(c => c.type === 'wedge' && !isSetSlot(c));
+  /* irons: only the slots a set apply actually writes - a 2i/3i driving iron or
+     utility is deliberately left out, so the count must leave it out too */
+  return S.bag.filter(isSetSlot);
+}
+
+/* <option>s grouped by brand, preselecting whatever head the category wears now */
+function gearOptions(list, selIdx, placeholder){
+  let o = '<option value="">' + (placeholder || '-- pick a model --') + '</option>';
+  let br = '';
+  list.forEach((m, i) => {
+    if(m.brand !== br){ if(br) o += '</optgroup>'; o += '<optgroup label="'+esc(m.brand)+'">'; br = m.brand; }
+    o += '<option value="'+i+'"'+(String(i)===String(selIdx)?' selected':'')+'>'+esc(gearLabel(m))+'</option>';
+  });
+  if(br) o += '</optgroup>';
+  return o;
+}
+
+/* what the TUNE picker should show: the user's explicit pick if they made one,
+   otherwise the model the whole category already wears */
+function eqSelectedIdx(cat){
+  if(UI.eqPick[cat] !== undefined) return UI.eqPick[cat];
+  const list = cat === 'iron' ? IRON_MODELS : (cat === 'wood' ? WOOD_MODELS : WEDGE_MODELS);
+  return modelIdxByHead(list, commonHead(cat), cat === 'iron' ? ironModelLabel : gearLabel);
+}
+
+/* Preselect a picker ONLY when every club in the category already wears the same
+   head. A plurality would make the card assert something untrue - "Callaway
+   Elyte" next to "3 clubs" when two of them have no head at all. */
+function commonHead(cat){
+  const t = gearTargets(cat);
+  if(!t.length) return null;
+  const heads = t.map(c => c.head).filter(Boolean);
+  if(heads.length !== t.length) return null;
+  return heads.every(hd => hd === heads[0]) ? heads[0] : null;
+}
+
+/* what an APPLY would touch, and how much of it is still blank */
+function gearMeta(cat){
+  const t = gearTargets(cat);
+  return {n: t.length, unset: t.filter(c => !c.head).length};
+}
+
+/* head-only bulk apply for woods + specialty wedges */
+function applyGearModel(cat, idx){
+  const list = cat === 'wood' ? WOOD_MODELS : WEDGE_MODELS;
+  const m = list[+idx];
+  if(!m){ toast('Pick a model first.'); return; }
+  const targets = gearTargets(cat);
+  if(!targets.length){ toast(cat === 'wood' ? 'No woods in your bag.' : 'No wedges in your bag.'); return; }
+  const label = gearLabel(m).slice(0, 40);
+  for(const c of targets) c.head = label;
+  save();
+  toast(label + ' \u2192 ' + targets.length + ' club' + (targets.length === 1 ? '' : 's') + '.', true);
+}
+
+/* exactly how many clubs an apply would write, for the confirm step - an iron
+   model that starts at 5i writes fewer clubs than the category holds */
+function gearWriteCount(cat, idx){
+  if(cat !== 'iron') return gearTargets(cat).length;
+  const m = IRON_MODELS[+idx];
+  if(!m) return 0;
+  return CORE_IRONS.filter(k => m.lofts[k] !== undefined && S.bag.some(c => c.key === k)).length;
+}
+function gearPickLabel(cat, idx){
+  const m = cat === 'iron' ? IRON_MODELS[+idx] : (cat === 'wood' ? WOOD_MODELS : WEDGE_MODELS)[+idx];
+  return m ? gearLabel(m) : '';
+}
+
+/* Options are selected by INDEX, never by head text. A re-render must be able to
+   restore the user's actual pick; matching on head would silently snap the
+   control back to whatever the clubs currently wear. */
+function modelIdxByHead(list, head, labelFn){
+  if(!head) return '';
+  const i = list.findIndex(m => labelFn(m) === head);
+  return i >= 0 ? String(i) : '';
+}
+function ironModelOptions(selIdx, placeholder){
   let o = '<option value="">' + (placeholder || '-- pick a model --') + '</option>';
   let lvl = '';
   IRON_MODELS.forEach((m, i) => {
     if(m.level !== lvl){ if(lvl) o += '</optgroup>'; o += '<optgroup label="'+esc(m.level)+'">'; lvl = m.level; }
-    const lbl = ironModelLabel(m);
-    o += '<option value="'+i+'"'+(selHead===lbl?' selected':'')+'>'+esc(lbl)+'</option>';
+    o += '<option value="'+i+'"'+(String(i)===String(selIdx)?' selected':'')+'>'+esc(ironModelLabel(m))+'</option>';
   });
   if(lvl) o += '</optgroup>';
   return o;
@@ -601,7 +737,7 @@ const GF_KEY = 'gf-data-v1';   /* Ground Force data - READ ONLY, never write */
 let S = null;
 let UI = { tab:'bag', sheet:null, saveT:null, tipT:null, confirm:null,
            pred:{type:'iron', loft:21}, addType:'iron', addLoft:21, swTag:'full',
-           pmins:30, pfocus:'irons' };
+           pmins:30, pfocus:'irons', eqPick:{} };
 
 function mkClub(l){
   return {id:l.key, key:l.key, name:l.name, type:l.type, loft:l.loft,
@@ -630,7 +766,8 @@ function normalize(d){
   let ctr = 0;
   for(const c of d.bag){
     c.id = c.id ? String(c.id).slice(0, 40) : 'n' + (ctr++) + '_' + Math.random().toString(36).slice(2,7);
-    if(typeof c.loft !== 'number' || !isFinite(c.loft)) c.loft = 30;
+    const lf = num(c.loft);      /* a hand-edited backup can carry "52" as a string */
+    c.loft = lf !== null ? lf : 30;
     c.loft = Math.min(66, Math.max(6, c.loft));
     if(TYPES.indexOf(c.type) < 0) c.type = 'iron';
     c.key = c.key ? String(c.key).slice(0, 4) : '?';
@@ -1578,8 +1715,39 @@ function renderTune(){
   for(const a of ACCENTS) h += '<button class="swatch'+(st.accent===a.hex?' on':'')+'" style="--sw:'+a.hex+'" data-act="accent" data-hex="'+a.hex+'" aria-label="'+a.name+'"></button>';
   h += '</div></div>';
 
+  h += '<div class="card pad"><div class="eyebrow">MY EQUIPMENT</div>'
+    + '<p class="bodytext dim small">Set a whole category in one go. Irons pull the model\u2019s real lofts too; woods and wedges keep the lofts you set (adjustable hosels, stamped soles).</p>';
+  const eqBlocks = [
+    {cat:'wood',  lab:'WOODS + DRIVER', list:WOOD_MODELS,  ph:'-- pick your wood model --'},
+    {cat:'iron',  lab:'IRONS 4i-PW',    list:IRON_MODELS,  ph:'-- pick your iron model --'},
+    {cat:'wedge', lab:'WEDGES', list:WEDGE_MODELS, ph:'-- pick your wedge model --'}
+  ];
+  for(const eq of eqBlocks){
+    const meta = gearMeta(eq.cat);
+    const cur = eqSelectedIdx(eq.cat);
+    const off = meta.n ? '' : ' disabled';
+    const nTxt = meta.n
+      ? meta.n + ' club' + (meta.n===1?'':'s') + (meta.unset ? ' \u00b7 ' + meta.unset + ' unset' : '')
+      : 'none in bag';
+    /* the armed token carries the exact pick, so changing the dropdown re-arms */
+    const pre = 'eq:' + eq.cat + ':';
+    const armed = typeof UI.confirm === 'string' && UI.confirm.indexOf(pre) === 0;
+    const armedIdx = armed ? UI.confirm.slice(pre.length) : '';
+    const btn = armed
+      ? 'TAP AGAIN \u00b7 ' + esc(gearPickLabel(eq.cat, armedIdx).toUpperCase()) + ' \u2192 ' + gearWriteCount(eq.cat, armedIdx) + ' CLUBS'
+      : 'APPLY TO ALL';
+    h += '<div class="eqrow">'
+      + '<div class="eqlab"><label for="eqsel_'+eq.cat+'">'+eq.lab+'</label><span class="eqn">'+nTxt+'</span></div>'
+      + '<select class="modelsel" id="eqsel_'+eq.cat+'" data-act="eqpick" data-cat="'+eq.cat+'"'+off+'>'
+      + (eq.cat==='iron' ? ironModelOptions(cur, eq.ph) : gearOptions(eq.list, cur, eq.ph))
+      + '</select>'
+      + '<button class="seg eqgo'+(armed?' armed':'')+'" data-act="eqapply" data-cat="'+eq.cat+'" aria-label="Apply model to all '+esc(eq.lab)+'"'+off+'>'+btn+'</button>'
+      + '</div>';
+  }
+  h += '<p class="bodytext dim small">Applying takes two taps \u2014 the first shows exactly how many clubs it will rewrite. Your PW rides with the iron set; a 2i/3i driving iron or utility is left alone, so set that one from its own card.</p></div>';
+
   h += '<div class="card pad"><div class="eyebrow">MY BAG</div>'
-    + '<p class="bodytext dim small">Tap any club in THE BAG to set its loft, model, head and shaft. The button below reloads your default bag (Driver, 5W, 7W, 3i/utility, 4i-PW Takomo, 52/56/60) \u2014 it replaces the current club list but keeps your settings.</p>'
+    + '<p class="bodytext dim small">Tap any club in THE BAG to set its loft, model, head and shaft. The button below reloads your default bag (Driver, 5W, 7W, 3i utility, 4i-PW Takomo 201T mkII, 52/56/60 Takomo SF2) \u2014 it replaces the current club list but keeps your settings.</p>'
     + '<div class="segrow"><button class="seg'+(UI.confirm==='rebag'?' danger':'')+'" data-act="rebag">'+(UI.confirm==='rebag'?'TAP AGAIN \u2014 REPLACES YOUR CLUBS':'RESET BAG TO MY CLUBS')+'</button></div></div>';
 
   const bk = S.meta.lastBackup;
@@ -1666,10 +1834,16 @@ function sheetClub(){
   h += '</div>';
 
   h += '<div class="sheetsec"><div class="eyebrow">EQUIPMENT</div>';
-  if(c.type === 'iron'){
+  const isSpecialtyWedge = c.type === 'wedge' && !isSetSlot(c);
+  if(c.type === 'iron' || (c.type === 'wedge' && !isSpecialtyWedge)){
     const known = c.key && IRON_MODELS.some(m => m.lofts[c.key] !== undefined);
-    h += '<div class="inpair"><span class="lab">MODEL</span><select class="modelsel" data-act="setmodel">'+ironModelOptions(c.head, '-- pick to auto-fill loft --')+'</select></div>'
-      + (known ? '' : '<p class="bodytext dim small" style="margin:6px 0 0">This club\u2019s slot ('+esc(c.key)+') isn\u2019t in the model tables \u2014 picking a model just sets the head; set loft manually above.</p>');
+    h += '<div class="inpair stack"><span class="lab">MODEL</span><select class="modelsel" data-act="setmodel">'+ironModelOptions(modelIdxByHead(IRON_MODELS, c.head, ironModelLabel), '-- pick to auto-fill loft --')+'</select></div>'
+      + (known ? '' : '<p class="bodytext dim small" style="margin:6px 0 0">This club\u2019s slot ('+esc(c.key)+') isn\u2019t in the loft tables \u2014 picking a model just sets the head; set loft manually above.</p>');
+  } else if(c.type === 'wood' || c.type === 'hybrid' || isSpecialtyWedge){
+    const cat = c.type === 'wedge' ? 'wedge' : 'wood';
+    h += '<div class="inpair stack"><span class="lab">MODEL</span><select class="modelsel" data-act="setgear" data-cat="'+cat+'">'
+      + gearOptions(cat==='wood'?WOOD_MODELS:WEDGE_MODELS, modelIdxByHead(cat==='wood'?WOOD_MODELS:WEDGE_MODELS, c.head, gearLabel), '-- pick your model --')+'</select></div>'
+      + '<p class="bodytext dim small" style="margin:6px 0 0">Sets the head. '+(cat==='wood'?'Loft comes off your hosel setting':'Wedge loft is stamped on the sole')+' \u2014 set it above.</p>';
   }
   h += '<div class="inpair"><span class="lab">HEAD</span><input class="cin" value="'+esc(c.head||'')+'" maxlength="40" placeholder="e.g. Takomo 201T mkII" data-act="chead"></div>'
     + '<div class="inpair"><span class="lab">SHAFT</span><input class="cin" value="'+esc(c.shaft||'')+'" maxlength="48" placeholder="e.g. Graphite Design Tour AD" data-act="cshaft"></div>'
@@ -1787,7 +1961,12 @@ function handleTap(e){
   if(!b) return;
   const act = b.dataset.act;
   /* two-step confirms reset when you tap anything else */
-  if(UI.confirm && act !== 'crem' && act !== 'reset' && act !== 'rebag') UI.confirm = null;
+  if(UI.confirm && act !== 'crem' && act !== 'reset' && act !== 'rebag' && act !== 'eqapply' && act !== 'eqpick'){
+    UI.confirm = null;
+    /* these acts have no handleTap branch, so nothing would repaint the
+       now-stale "SURE? TAP AGAIN" label without this */
+    if(act === 'setmodel' || act === 'setgear') sheetRender();
+  }
 
   if(act==='club'){ UI.sheet = {k:'club', id:b.dataset.id}; UI.swTag = 'full'; openSheet(); return; }
   if(act==='addclub'){ UI.sheet = {k:'add'}; openSheet(); return; }
@@ -1835,6 +2014,20 @@ function handleTap(e){
     if(l && !S.bag.some(x => x.key === l.key)){ S.bag.push(mkClub(l)); save(); toast(l.name+' added.', true); sheetRender(); render(); }
     return;
   }
+  if(act==='eqapply'){
+    const cat = b.dataset.cat;
+    const idx = eqSelectedIdx(cat);
+    if(idx === '' || idx === undefined){ UI.confirm = null; toast('Pick a model first.'); render(); return; }
+    /* the dropdown pre-selects whatever the category already wears, so a bare
+       tap could rewrite lofts the user never chose - make it deliberate */
+    const token = 'eq:' + cat + ':' + idx;
+    if(UI.confirm !== token){ UI.confirm = token; render(); return; }
+    UI.confirm = null;
+    if(cat === 'iron') applyIronModel(idx, false);
+    else applyGearModel(cat, idx);
+    delete UI.eqPick[cat];   /* heads now match - fall back to reading the bag */
+    render(); return;
+  }
   if(act==='applyironmodel'){
     const selEl = el('ironsetsel');
     const idx = selEl ? selEl.value : '';
@@ -1847,7 +2040,13 @@ function handleTap(e){
   if(act==='customadd'){
     const nameEl = el('caddname');
     const name = (nameEl && nameEl.value.trim()) || (fmtLoft(UI.addLoft)+' '+UI.addType);
-    const key = name.replace(/[^0-9A-Za-z]/g,'').slice(0,2).toUpperCase() || '??';
+    let key = name.replace(/[^0-9A-Za-z]/g,'').slice(0,2).toUpperCase() || '??';
+    /* a duplicate key would make bulk apply count it but only ever write the first */
+    if(S.bag.some(x => x.key === key)){
+      let n = 2;
+      while(S.bag.some(x => x.key === key.slice(0,3) + n) && n < 9) n++;
+      key = key.slice(0,3) + n;
+    }
     S.bag.push({id:'x'+Date.now().toString(36), key, name:name.slice(0,24), type:UI.addType, loft:UI.addLoft,
                 head:'', shaft:'', carry:null, ball:null, auto:true, readings:[]});
     save(); closeSheet(); toast(name+' added.', true); return;
@@ -1939,9 +2138,24 @@ function handleInput(e){
   document.body.addEventListener('input', handleInput);
   document.body.addEventListener('change', e => {
     const b = e.target.closest('[data-act]');
-    if(!b || b.dataset.act !== 'setmodel') return;
+    if(b && b.dataset.act === 'eqpick'){
+      const cat = b.dataset.cat;
+      if(b.value === '') delete UI.eqPick[cat]; else UI.eqPick[cat] = b.value;
+      UI.confirm = null;          /* a new pick disarms the pending confirm */
+      render(); return;
+    }
+    if(!b || (b.dataset.act !== 'setmodel' && b.dataset.act !== 'setgear')) return;
     const c = UI.sheet && UI.sheet.k==='club' ? findClub(UI.sheet.id) : null;
     if(!c || b.value === '') return;
+    if(b.dataset.act === 'setgear'){
+      const list = b.dataset.cat === 'wood' ? WOOD_MODELS : WEDGE_MODELS;
+      const g = list[+b.value];
+      if(!g) return;
+      c.head = gearLabel(g).slice(0,40);
+      save(); sheetRender();
+      toast(gearLabel(g) + ' \u00b7 head set', true);
+      return;
+    }
     const m = IRON_MODELS[+b.value];
     if(!m) return;
     c.head = ironModelLabel(m).slice(0,40);

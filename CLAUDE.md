@@ -37,6 +37,24 @@ twins.
   or stock numbers - they only build the wedge matrix (GAPS view) via
   `partialStock()` and the personal takeaway ratios in `swingRatio()`
   (defaults 80% chest / 60% hip until real partials exist).
+- Equipment model tables: `IRON_MODELS` (per-club lofts - a set apply writes BOTH
+  loft and head), `WOOD_MODELS` + `WEDGE_MODELS` (head ONLY - wood loft comes off
+  an adjustable hosel, wedge loft is stamped on the sole, so neither is safe to
+  overwrite from a table). Bulk apply lives in TUNE > MY EQUIPMENT via
+  `gearTargets(cat)` / `applyGearModel()` / `applyIronModel()`.
+  **Category rule - by SLOT, never by loft.** Loft is user-editable, so a loft
+  rule put a PW bent to 48 in two categories at once and a wedge bent to 47.5 in
+  none. `isSetSlot(c)` = key in `CORE_IRONS` (4i-PW) = the iron set; every other
+  wedge is a specialty wedge; woods+hybrids are one category. A 2i/3i driving
+  iron or utility is deliberately excluded from bulk changes - set it per club.
+  **Picker state:** options are selected by INDEX (`modelIdxByHead`), never by
+  head text, and the user's explicit pick lives in `UI.eqPick[cat]` - matching on
+  head made a re-render snap the control back to what the clubs already wore, so
+  the second confirm tap would have applied the wrong model. APPLY is a two-tap
+  confirm (`UI.confirm = 'eq:<cat>:<idx>'`) because the picker is pre-armed from
+  the bag; the armed label shows `gearWriteCount()`, the exact number of clubs
+  the chosen model will write (an iron set starting at 5i writes fewer than the
+  category holds).
 
 ## The model (how prediction works)
 
