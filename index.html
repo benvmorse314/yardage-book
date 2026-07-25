@@ -1755,6 +1755,8 @@ function renderTune(){
   h += '<div class="card pad"><div class="eyebrow">DATA</div>'
     + '<p class="bodytext dim small">'+(MODE==='local' ? 'Saved on this device (localStorage). '+bkTxt : 'No storage available \u2014 data lives only until this tab closes.')+'</p>'
     + '<div class="segrow"><button class="seg" data-act="export">EXPORT JSON</button><button class="seg" data-act="import">IMPORT</button></div>'
+    + '<div class="segrow"><button class="seg" data-act="exportclip">COPY JSON</button><button class="seg" data-act="importclip">PASTE JSON</button></div>'
+    + '<p class="bodytext dim small">On iPhone, EXPORT JSON lands in Files where nothing else can reach it \u2014 use COPY JSON instead and paste it wherever you need it.</p>'
     + '<div class="segrow"><button class="seg danger" data-act="reset">'+(UI.confirm==='reset'?'TAP AGAIN TO WIPE EVERYTHING':'RESET ALL DATA')+'</button></div></div>';
 
   h += '<div class="card pad"><div class="eyebrow">COMPANION</div>'
@@ -2097,6 +2099,34 @@ function handleTap(e){
       S.meta.lastBackup = Date.now(); save(); render();
       toast('Backup exported.', true);
     }catch(err){ toast('Export failed.'); }
+    return;
+  }
+  if(act==='exportclip'){
+    /* iOS: EXPORT JSON writes into Files, where nothing on the desktop can reach it.
+       Clipboard is the only export path off an iPhone that a human can actually use.
+       Ported from Ground Force, which has had this since v2. */
+    try{
+      const j = JSON.stringify(S, null, 1);
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(j).then(()=>{
+          S.meta.lastBackup = Date.now(); save(); render();
+          toast('Backup copied to clipboard.', true);
+        }).catch(()=>toast('Copy blocked \u2014 use EXPORT JSON instead.'));
+      } else toast('Clipboard unavailable in this view.');
+    }catch(err){ toast('Copy failed.'); }
+    return;
+  }
+  if(act==='importclip'){
+    const j = prompt('Paste your Yardage Book backup JSON here:');
+    if(!j) return;
+    try{
+      const parsed = JSON.parse(j);
+      /* same guard as the file importer - never let a foreign blob become the bag */
+      if(!parsed || !parsed.settings || !Array.isArray(parsed.bag)) throw new Error('not a Yardage Book backup');
+      S = normalize(parsed);
+      save(); applyAccent(); render();
+      toast('Backup imported.', true);
+    }catch(err){ toast('That isn\u2019t a Yardage Book backup.'); }
     return;
   }
   if(act==='import'){ el('importfile').click(); return; }
