@@ -8,8 +8,8 @@ client rails).
 ## Facts
 
 - **Working folder:** E:\yardage-book
-- **Intended live site:** https://benvmorse314.github.io/yardage-book/ (GitHub Pages,
-  main branch, root folder - repo not created yet; same account as ground-force)
+- **Live site:** https://benvmorse314.github.io/yardage-book/ (GitHub Pages, main
+  branch, root folder). Repo: github.com/benvmorse314/yardage-book
 - **Sibling app:** Ground Force at https://benvmorse314.github.io/ground-force/
 - **Job:** track stock carry + ball speed per club; interpolate the rest of the
   bag; predict numbers for a club Ben doesn't own yet.
@@ -26,7 +26,8 @@ twins.
 - Rendering: innerHTML string templates per tab; event delegation via `data-act`
   attributes on `document.body` (handleTap / handleInput).
 - Views: BAG (clubs + readings), GAPS (carry ladder + gap flags + fill-the-hole),
-  PREDICT (new-club calculator + model chart + Ground Force link), TUNE (settings).
+  PREDICT (new-club calculator + model chart + Ground Force link), PRACTICE
+  (session builder + drill engine + Putting Lab), TUNE (settings).
 - State: single object `S`, persisted to localStorage key **`yb-data-v1`**.
   Bag is an array of club objects `{id, key, name, type, loft, carry, ball, auto,
   readings:[{d,c,b,s,sw?}]}` - `c` carry, `b` ball speed, `s` club speed,
@@ -55,6 +56,36 @@ twins.
   the bag; the armed label shows `gearWriteCount()`, the exact number of clubs
   the chosen model will write (an iron set starting at 5i writes fewer than the
   category holds).
+
+## Practice + Putting Lab
+
+`DRILLS` is one flat array; each entry carries `phase` (warm / block / transfer /
+pressure), a `focus` tag list, and `clubs` / `how` / `win` BUILDER FUNCTIONS that
+receive `drillCtx()` so every drill quotes Ben's real numbers. `planSession()`
+budgets minutes per phase and picks one drill per phase at random from the
+matching pool. `FOCI` drives the segmented picker.
+
+Three rules the pool filter enforces, all easy to break by accident:
+1. `focus:['any']` means "any CLUB session" - those drills are explicitly barred
+   from a putting plan, or a wedge-matrix drill turns up on the putting mat.
+2. `req` is an optional predicate gating a drill on mat features. The grain and
+   break drills only exist if the mat has grain / break inserts, and the speed
+   translation drill only if mat stimp differs from home-green stimp.
+3. New drill ids must start `pt_` for putting - `normalize()` keeps a stored
+   session only if its ids resolve in `DRILLMAP`.
+
+**Putting state is `S.putt` = `{mat:{stimp, home, len, grain, breaks}, log:[]}`.**
+`mat.stimp` is the indoor mat, `mat.home` is the speed of the greens actually
+played - the GAP between them is the whole point, because a fast mat grooves a
+short stroke that leaves everything short outdoors. `puttCtx()` derives it
+(roll-out scales roughly linearly with stimp for a given impact speed).
+
+**The make test logs RAW made/attempted, never a percentage.** Counts are
+lossless - a rate can always be derived from counts, never the reverse - so the
+aggregation policy in `puttForm()` can be rewritten without touching a logged
+row. `puttProto()` picks the dominant (distance, break) pair by attempts and the
+trend only ever compares like with like; rows outside it render OFF PROTOCOL
+rather than being silently pooled. A make rate is only comparable against itself.
 
 ## The model (how prediction works)
 
@@ -86,7 +117,7 @@ override per club via the AUTO toggle.
 5. After editing `sw.js`-cached assets, bump the `VER` constant in `sw.js` or
    installed clients keep serving the old build.
 
-## Deploy loop (PowerShell) - once the GitHub repo exists
+## Deploy loop (PowerShell)
 
 ```
 git add -A; git commit -m "..."; git push

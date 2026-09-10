@@ -737,12 +737,21 @@ const GF_KEY = 'gf-data-v1';   /* Ground Force data - READ ONLY, never write */
 let S = null;
 let UI = { tab:'bag', sheet:null, saveT:null, tipT:null, confirm:null,
            pred:{type:'iron', loft:21}, addType:'iron', addLoft:21, swTag:'full',
-           pmins:30, pfocus:'irons', eqPick:{} };
+           pmins:30, pfocus:'irons', eqPick:{},
+           plog:{ ft:6, made:null, att:20, br:'S' } };
 
 function mkClub(l){
   return {id:l.key, key:l.key, name:l.name, type:l.type, loft:l.loft,
           head:l.head||'', shaft:l.shaft||'',
           carry:null, ball:null, auto:true, readings:[]};
+}
+/* Putting lab. The indoor mat is to putting drills what the bag is to club
+   drills - the drills read these numbers and adapt to them.
+   stimp = the mat's speed. home = the speed of the greens actually played.
+   The GAP between those two is what ruins indoor-to-course transfer, so it is
+   stored, not assumed. */
+function puttDefaults(){
+  return { mat:{ stimp:12, home:9.5, len:12, grain:true, breaks:true }, log:[] };
 }
 function defaults(){
   return {
@@ -750,6 +759,7 @@ function defaults(){
     settings:{ accent:'#3E9B6B', unit:'yd', sunit:'mph', win:5 },
     bag: BAG_SPEC.map(mkClub),
     practice:{ log:[], cur:null },
+    putt: puttDefaults(),
     meta:{ lastBackup:null }
   };
 }
@@ -809,6 +819,33 @@ function normalize(d){
       .slice(0, 8);
     if(!pc.plan.length) d.practice.cur = null;
   } else d.practice.cur = null;
+  /* putting lab (added v1.7) */
+  if(!d.putt || typeof d.putt !== 'object' || Array.isArray(d.putt)) d.putt = puttDefaults();
+  const pm = puttDefaults().mat;
+  if(!d.putt.mat || typeof d.putt.mat !== 'object' || Array.isArray(d.putt.mat)) d.putt.mat = pm;
+  else {
+    const mt = d.putt.mat, dn = (v, lo, hi, dflt) => { const x = num(v); return x !== null ? clamp(x, lo, hi) : dflt; };
+    mt.stimp = dn(mt.stimp, 6, 15, pm.stimp);
+    mt.home  = dn(mt.home,  6, 15, pm.home);
+    mt.len   = dn(mt.len,   3, 60, pm.len);
+    mt.grain  = mt.grain  === undefined ? pm.grain  : !!mt.grain;
+    mt.breaks = mt.breaks === undefined ? pm.breaks : !!mt.breaks;
+  }
+  if(!Array.isArray(d.putt.log)) d.putt.log = [];
+  d.putt.log = d.putt.log
+    .filter(e => e && typeof e === 'object')
+    .map(e => {
+      /* floor of 0, not 1 - a malformed att:0 row must fall through the filter
+         below, not become a 0-of-1 row that reads as a real missed putt */
+      const att  = (function(){ const v = num(e.att);  return v !== null ? clamp(Math.round(v), 0, 200) : 0; })();
+      const made = (function(){ const v = num(e.made); return v !== null ? clamp(Math.round(v), 0, 200) : 0; })();
+      return { d: typeof e.d === 'string' ? e.d.slice(0,10) : todayISO(),
+               ft: (function(){ const v = num(e.ft); return v !== null ? clamp(v, 1, 60) : 6; })(),
+               att, made: Math.min(made, att),   /* a hand-edited backup can claim 9 of 5 */
+               br: e.br === 'B' ? 'B' : 'S' };
+    })
+    .filter(e => e.att > 0)
+    .slice(-300);
   if(!d.meta || typeof d.meta !== 'object' || Array.isArray(d.meta)) d.meta = { lastBackup:null };
   d.meta.rev = (typeof d.meta.rev === 'number' && isFinite(d.meta.rev)) ? d.meta.rev : 0;
   /* courtesy upgrade: a pristine v1 default bag (never customized, no data) becomes the real bag */
@@ -1563,20 +1600,117 @@ const DRILLS = [
   how:()=>'Six drives: two starting left edge, two center, two right edge of the corridor - called in advance. HD Golf trace is the judge.',
   win:()=>'4 of 6 start where you called them.'}
 ];
+/* ---------- PUTTING ---------- */
+
+const M_PER_FT = 0.3048;
+function fmtFt(ft){ return S.settings.unit==='m' ? (round1(ft*M_PER_FT)+' m') : (round1(ft)+' ft'); }
+
+/* Mat-derived numbers. Roll-out scales roughly with stimp for the same impact
+   speed, so the SAME stroke covers about (home/stimp) of its mat distance on
+   the course. A linear approximation, but the direction and rough size are the
+   coaching point: practice fast, play slow, leave everything short. */
+function puttCtx(){
+  const m = S.putt.mat;
+  const ratio = (m.home > 0 && m.stimp > 0) ? m.home / m.stimp : 1;
+  const pct = Math.round(Math.abs(1 - ratio) * 100);
+  const longest = Math.max(3, Math.round(m.len - 1));
+  const mid = clamp(Math.round(longest * 0.55), 4, 20);
+  return { m, ratio, pct, longest, mid,
+           fast: m.stimp >= 11.5, slow: m.stimp <= 9,
+           drift: pct >= 8 && m.home < m.stimp };
+}
+function hasGrain(){ return !!S.putt.mat.grain; }
+function hasBreaks(){ return !!S.putt.mat.breaks; }
+
+const PUTT_DRILLS = [
+ {id:'pt_roll', name:'Roll Check', phase:'warm', focus:['putting'],
+  clubs:()=>'putter only',
+  how:()=>'Eight putts at '+fmtFt(6)+'. Ignore where they finish - watch the FIRST six inches. The ball should be rolling, not hopping. A skid means your shaft lean at impact is wrong: pressing forward kills the loft, hanging back adds too much.',
+  win:()=>'Six of eight start rolling immediately. No visible bounce off the face.'},
+ {id:'pt_setup', name:'Setup Audit', phase:'warm', focus:['putting'],
+  clubs:()=>'putter, mirror if you have one',
+  how:()=>'Three checks before any reps, because volume on a mat grooves whatever you already do wrong. <b>1</b> Sole it flat - if the toe sits up, the lie is too upright and the face genuinely aims off where it looks. <b>2</b> Eyes over the ball or a touch inside, never outside. <b>3</b> Ball forward of centre so you catch it slightly on the up.',
+  win:()=>'All three pass. If the toe sits up, stop - that is a lie-angle bend, not something to putt through.'},
+ {id:'pt_tempo', name:'Metronome Tempo', phase:'warm', focus:['putting'],
+  clubs:()=>'putter, phone metronome',
+  how:(x)=>{ const c = puttCtx(); return 'Metronome at 76 bpm, one beat back and one beat through. Putt '+fmtFt(3)+', '+fmtFt(c.mid)+', '+fmtFt(c.longest)+' without changing the beat.'+(c.fast?' On a '+round1(c.m.stimp)+' stimp the stroke gets SHORT, and short strokes are where deceleration creeps in - length changes, rhythm does not.':' Length changes, rhythm does not.'); },
+  win:()=>'Same beat on every putt. If you have to rush the long one, your backstroke was too short.'},
+
+ {id:'pt_yard', name:'The Yardstick', phase:'block', focus:['putting'],
+  clubs:()=>'putter + 36 inch metal ruler',
+  how:()=>'Ball on the end of the yardstick, roll it the full length without falling off. This is the highest-feedback drill in putting - it tests face angle, path and centre strike at once, and it is instant pass or fail. Ten attempts.',
+  win:()=>'Six of ten stay on. If you cannot break three, the face is the problem, not the stroke shape.'},
+ {id:'pt_gate', name:'Start-Line Gate', phase:'block', focus:['putting'],
+  clubs:()=>'putter + two coins',
+  how:()=>'Two coins just wider than a ball, set one foot IN FRONT of the ball - not around the putter head. A head gate trains stroke aesthetics; a ball gate tests the only thing that matters, which is where the ball actually starts. Twelve putts.',
+  win:()=>'Nine of twelve through the gate. Inside 6 feet the face controls about 85% of start direction - this drill is that fact, made visible.'},
+ {id:'pt_strike', name:'Toe-Heel Gate', phase:'block', focus:['putting'],
+  clubs:()=>'putter + two coins',
+  how:()=>'Two coins just outside the toe and heel of the putter at address. Ten putts without clipping either. A high-MOI mallet is forgiving on mishits, which is a gift on the course and a problem in practice - it hides bad strike. This un-hides it.',
+  win:()=>'Eight of ten clean. Any coin you hit is a strike you would never have felt.'},
+ {id:'pt_lead', name:'Lead Arm Only', phase:'block', focus:['putting'],
+  clubs:()=>'putter, lead hand only',
+  how:()=>'Trail hand off the grip. Ten putts at '+fmtFt(5)+'. Kills any flip and makes the face stability obvious - if the face is closing through impact you will feel it immediately with one hand on the club.',
+  win:()=>'Face feels stable, not rotating. Then put the trail hand back on and keep the same feel.'},
+
+ {id:'pt_grain', name:'Grain Calibration', phase:'transfer', focus:['putting'], req:hasGrain,
+  clubs:()=>'putter, both directions',
+  how:(x)=>{ const c = puttCtx(); return 'You know where the grain runs, which means you can do the one thing a real green never allows: hit the SAME putt down-grain and into-grain back to back with everything else held constant. Four each at '+fmtFt(c.mid)+', then again at '+fmtFt(c.longest)+'. Note the difference in feet.'; },
+  win:()=>'You can state the down-grain vs into-grain difference as a number. Carry it to every kikuyu and Bermuda green you play.'},
+ {id:'pt_read', name:'Read The Grain Blind', phase:'transfer', focus:['putting'], req:hasGrain,
+  clubs:()=>'putter, eyes first',
+  how:()=>'Down-grain looks shiny and light. Into-grain looks dark and dull. Stand over ten putts from mixed positions and CALL the grain out loud before you check what you know is true. You have an answer key here and nowhere else.',
+  win:()=>'Eight of ten called right. On real Bermuda the ragged browned-out edge of the hole is the down-grain side.'},
+ {id:'pt_break', name:'Speed Changes Break', phase:'transfer', focus:['putting'], req:hasBreaks,
+  clubs:()=>'putter + break insert',
+  how:()=>'Set one breaking putt. Hit it three ways - died in, normal, and jammed - and watch how much less break it takes each time. Six rounds of three. Most golfers treat read and speed as two decisions. They are one: a putt does not break 8 inches, it breaks 8 inches AT A GIVEN PACE.',
+  win:()=>'You can predict the apex before each ball based on the pace you have chosen.'},
+ {id:'pt_apex', name:'Apex Aim', phase:'transfer', focus:['putting'], req:hasBreaks,
+  clubs:()=>'putter + break insert + coin',
+  how:()=>'Put a coin at the high point of the break and putt TO THE COIN, not to the hole. Twelve putts. Removes the target from the equation and isolates the only thing you actually control, which is starting the ball on a chosen line.',
+  win:()=>'Nine of twelve start over the coin. Where they finish is not the test.'},
+ {id:'pt_ends', name:'Both Ends', phase:'transfer', focus:['putting'], req:hasBreaks,
+  clubs:()=>'putter + break insert',
+  how:()=>'Build a break, then putt it from BOTH ends so you play the mirror read. Ten from each side, count makes separately. Everyone has a directional bias and it is worth more to know yours than to hit a hundred straight putts.',
+  win:()=>'You know which break direction is your weak side. That is the one to practise, not the comfortable one.'},
+ {id:'pt_blind', name:'Speed Call', phase:'transfer', focus:['putting'],
+  clubs:()=>'putter, eyes closed',
+  how:(x)=>{ const c = puttCtx(); return 'Mixed distances between '+fmtFt(4)+' and '+fmtFt(c.longest)+'. Putt, then close your eyes and call it - short, long, or perfect - BEFORE you look. Fifteen balls. Looking straight away short-circuits the calibration you are trying to build.'; },
+  win:()=>'Twelve of fifteen calls correct. Speed control is entirely internal feedback - this is how you build it.'},
+ {id:'pt_xfer', name:'Course Speed Translation', phase:'transfer', focus:['putting'],
+  req:()=>puttCtx().drift,
+  clubs:()=>'putter, long putts',
+  how:(x)=>{ const c = puttCtx();
+    return 'Your mat rolls <span class="mono">'+round1(c.m.stimp)+'</span> and the greens you play roll about <span class="mono">'+round1(c.m.home)+'</span>. The stroke that covers '+fmtFt(10)+' here only covers about <span class="mono">'+fmtFt(10*c.ratio)+'</span> out there - you are '+c.pct+'% short on every putt unless you consciously add. Putt to a target '+fmtFt(c.longest)+' away, then deliberately over-hit by '+c.pct+'% and feel how much bigger that stroke is.'; },
+  win:()=>'You can produce the bigger stroke on demand without it feeling like a jab.'},
+
+ {id:'pt_ladder', name:'Three In A Row', phase:'pressure', focus:['putting'],
+  clubs:()=>'putter, three distances',
+  how:(x)=>{ const c = puttCtx(); return 'Three distances - '+fmtFt(3)+', '+fmtFt(6)+', '+fmtFt(Math.min(10, c.longest))+'. Make three consecutive from each before moving up. A miss sends you back to the start of that distance. This is the only real pressure available indoors, and pressure is where putting strokes actually break.'; },
+  win:()=>'You clear all three rungs. If you never clear the last one, it is too long for the surface - drop it a foot.'},
+ {id:'pt_makes', name:'The Make Test', phase:'pressure', focus:['putting'],
+  clubs:()=>'putter, one fixed distance',
+  how:(x)=>{ const c = puttCtx(); return 'Twenty putts from '+fmtFt(6)+''+(c.m.breaks?', same break insert every time':'')+'. Full routine on every ball. Then LOG IT in the Putting Lab card above - same distance, same setup, every session, or the number means nothing.'; },
+  win:()=>'This is the one number that tracks. It will be low at first on a fast surface; that is the point.'}
+];
+for(const d of PUTT_DRILLS) DRILLS.push(d);
+
 const DRILLMAP = {};
 for(const d of DRILLS) DRILLMAP[d.id] = d;
 
 const PHASE_LABEL = {warm:'WARM-UP', block:'BLOCK', transfer:'TRANSFER', pressure:'PRESSURE'};
-const FOCI = [['irons','IRONS'],['wedges','WEDGES'],['driver','DRIVER'],['bag','FULL BAG'],['gap','GAPPING']];
+const FOCI = [['irons','IRONS'],['wedges','WEDGES'],['driver','DRIVER'],['bag','FULL BAG'],['gap','GAPPING'],['putting','PUTTING']];
 
 function planSession(focus, mins, seed){
   const rng = mulberry(seed);
   if(focus === 'gap') return planGapping(mins);
   const plan = [], used = {};
   const pick = (phase, budget) => {
+    /* 'any' drills are club drills - they must never leak into a putting plan */
     const pool = DRILLS.filter(d => d.phase===phase && !used[d.id]
-      && (d.focus.indexOf(focus)>=0 || d.focus.indexOf('any')>=0)
-      && (!d.minTotal || mins >= d.minTotal));
+      && (d.focus.indexOf(focus)>=0 || (focus!=='putting' && d.focus.indexOf('any')>=0))
+      && (!d.minTotal || mins >= d.minTotal)
+      && (!d.req || d.req()));   /* req gates a drill on mat features (grain, break inserts) */
     if(!pool.length || budget < 3) return;
     const d = pool[Math.floor(rng()*pool.length)];
     used[d.id] = 1;
@@ -1632,6 +1766,106 @@ function drillHTML(phase, name, mins, clubs, how, win){
     + '</div>';
 }
 
+/* The protocol you have actually been logging: the most-used (distance, break)
+   pair. A make rate is only comparable against itself, so the app trends the
+   dominant protocol rather than pooling putts hit under different conditions. */
+function puttProto(){
+  const tally = {};
+  for(const e of S.putt.log){
+    const k = round1(e.ft) + '|' + e.br;
+    tally[k] = (tally[k] || 0) + e.att;
+  }
+  let best = null, bn = 0;
+  for(const k in tally) if(tally[k] > bn){ bn = tally[k]; best = k; }
+  if(!best) return null;
+  const p = best.split('|');
+  return { ft: parseFloat(p[0]), br: p[1] };
+}
+
+/* Make rate over a slice of matching sessions. Raw made/attempted is what gets
+   stored, so this policy can change later without touching a logged row. */
+function puttForm(proto, take, skip){
+  if(!proto) return null;
+  const rows = S.putt.log.filter(e => Math.abs(e.ft - proto.ft) < 0.51 && e.br === proto.br);
+  const end = rows.length - (skip || 0);
+  const win = rows.slice(Math.max(0, end - take), end);
+  if(!win.length) return null;
+  /* POLICY: pooled by attempts - every putt counts once, so a 40-ball session
+     outweighs a 5-ball one. That is the better statistical estimate; the
+     alternative (mean of per-session rates, each session equal) reads more like
+     consistency. Swap this one line to change it. */
+  const made = win.reduce((a,e)=>a+e.made,0), att = win.reduce((a,e)=>a+e.att,0);
+  return { pct: Math.round(made/att*100), made, att, n:win.length };
+}
+
+function puttLabHTML(){
+  const c = puttCtx(), m = c.m, L = UI.plog;
+  const stp = (act, d, lab) => '<button class="ghost" data-act="'+act+'" data-d="'+d+'">'+lab+'</button>';
+  let h = '<div class="card pad"><div class="eyebrow">PUTTING LAB \u00b7 MAT PROFILE</div>'
+    + '<p class="bodytext dim small">The drills read these numbers the way club drills read your bag. Get them right once.</p>'
+    + '<div class="setline"><span>Mat speed <span class="dim small">(stimp)</span></span><div class="stepper">'
+      + stp('pmstimp','-0.5','-') + '<span class="mono" style="font-size:17px; font-weight:600">'+round1(m.stimp)+'</span>' + stp('pmstimp','0.5','+')
+    + '</div></div>'
+    + '<div class="setline"><span>Greens you play <span class="dim small">(stimp)</span></span><div class="stepper">'
+      + stp('pmhome','-0.5','-') + '<span class="mono" style="font-size:17px; font-weight:600">'+round1(m.home)+'</span>' + stp('pmhome','0.5','+')
+    + '</div></div>'
+    + '<div class="setline"><span>Mat length</span><div class="stepper">'
+      + stp('pmlen','-1','-') + '<span class="mono" style="font-size:17px; font-weight:600">'+fmtFt(m.len)+'</span>' + stp('pmlen','1','+')
+    + '</div></div>'
+    + '<div class="setline"><span>Has grain</span><button class="toggle'+(m.grain?' on':'')+'" data-act="pmgrain" aria-label="Grain"><i></i></button></div>'
+    + '<div class="setline"><span>Break inserts</span><button class="toggle'+(m.breaks?' on':'')+'" data-act="pmbreaks" aria-label="Break inserts"><i></i></button></div>';
+
+  /* the transfer warning - the single most useful derived number here */
+  if(c.drift){
+    h += '<p class="bodytext small"><b class="mono" style="color:var(--gold)">SPEED GAP '+c.pct+'%</b><br>'
+      + 'The stroke that rolls <span class="mono">'+fmtFt(10)+'</span> on this mat only rolls about <span class="mono">'+fmtFt(10*c.ratio)+'</span> on a '
+      + round1(m.home)+' green. Practise here for LINE; calibrate distance outdoors, or you will leave everything short.</p>';
+  } else if(m.home > m.stimp){
+    h += '<p class="bodytext dim small">Your mat is slower than the greens you play, so expect to run putts past outdoors. Line work still transfers.</p>';
+  }
+  h += '</div>';
+
+  /* make test */
+  const proto = puttProto();
+  h += '<div class="card pad"><div class="eyebrow">THE MAKE TEST</div>'
+    + '<p class="bodytext dim small">One number that actually tracks. Freeze the protocol - same distance, same setup, every time - or it means nothing.</p>'
+    + '<div class="segrow">';
+  for(const f of [3,5,6,8,10]) h += '<button class="seg'+(L.ft===f?' on':'')+'" data-act="plft" data-f="'+f+'">'+fmtFt(f)+'</button>';
+  h += '</div><div class="segrow">'
+    + '<button class="seg'+(L.br==='S'?' on':'')+'" data-act="plbr" data-b="S">STRAIGHT</button>'
+    + '<button class="seg'+(L.br==='B'?' on':'')+'" data-act="plbr" data-b="B">BREAKING</button>'
+    + '</div>'
+    + '<div class="inpair"><span class="lab">MADE</span><input class="nin" inputmode="numeric" placeholder="0" value="'+(L.made!==null?L.made:'')+'" data-act="plmade"></div>'
+    + '<div class="inpair"><span class="lab">ATTEMPTED</span><input class="nin" inputmode="numeric" placeholder="20" value="'+(L.att!==null?L.att:'')+'" data-act="platt"></div>'
+    + '<button class="bigadd" data-act="pllog">LOG THE TEST</button></div>';
+
+  if(proto){
+    const now = puttForm(proto, 5, 0), prev = puttForm(proto, 5, 5), all = puttForm(proto, 999, 0);
+    const pLab = fmtFt(proto.ft) + ' ' + (proto.br==='B' ? 'breaking' : 'straight');
+    let arrow = '';
+    if(now && prev){
+      const d = now.pct - prev.pct;
+      if(d >= 3) arrow = '<span class="trend up">+'+d+'</span>';
+      else if(d <= -3) arrow = '<span class="trend dn">'+d+'</span>';
+    }
+    h += '<div class="ptiles">'
+      + '<div class="ptile"><div class="tlabel">Last 5 tests</div><div class="tval">'+(now?now.pct:'\u2014')+'<small>%</small>'+arrow+'</div></div>'
+      + '<div class="ptile"><div class="tlabel">Previous 5</div><div class="tval">'+(prev?prev.pct:'\u2014')+'<small>%</small></div></div>'
+      + '<div class="ptile"><div class="tlabel">All tests</div><div class="tval">'+(all?all.pct:'\u2014')+'<small>%</small></div></div>'
+      + '</div>'
+      + '<div class="card pad"><div class="eyebrow">TRENDING '+esc(pLab).toUpperCase()+'</div>';
+    const recent = S.putt.log.slice(-8).reverse();
+    for(const e of recent){
+      const off = Math.abs(e.ft - proto.ft) >= 0.51 || e.br !== proto.br;
+      h += '<div class="seshrow"><span>'+esc(fmtDate(e.d))+' \u00b7 <span class="mono dim">'+esc(fmtFt(e.ft))+(e.br==='B'?' br':'')+'</span>'
+        + (off?' <span class="mchip warn">OFF PROTOCOL</span>':'')
+        + '</span><span class="mono">'+e.made+'/'+e.att+' <span class="dim">'+Math.round(e.made/e.att*100)+'%</span></span></div>';
+    }
+    h += '</div>';
+  }
+  return h;
+}
+
 function renderPractice(){
   const P = S.practice;
   let h = clusterHTML();
@@ -1645,10 +1879,13 @@ function renderPractice(){
   for(const f of FOCI) h += '<button class="seg'+(UI.pfocus===f[0]?' on':'')+'" data-act="pfocus" data-f="'+f[0]+'">'+f[1]+'</button>';
   h += '</div>'
     + (UI.pfocus==='gap' ? '<p class="bodytext dim small">Gapping day: a data-collection session. The app picks your least-logged clubs and you turn them into real stock numbers.</p>' : '')
+    + (UI.pfocus==='putting' ? '<p class="bodytext dim small">Indoor mat session. Drills adapt to the mat profile below - grain and break drills only appear if your mat has them.</p>' : '')
     + '<button class="bigadd" data-act="pbuild">'+(P.cur?'REBUILD (NEW DRILLS)':'BUILD MY SESSION')+'</button></div>';
 
+  if(UI.pfocus==='putting') h += puttLabHTML();
+
   const M = buildModel();
-  if(!M.fc && UI.pfocus!=='gap' && !P.cur){
+  if(!M.fc && UI.pfocus!=='gap' && UI.pfocus!=='putting' && !P.cur){
     h += '<div class="card pad"><p class="bodytext dim small">No stock numbers yet, so drills will show ? instead of your carries. Tip: run a GAPPING session first - 30 minutes and the whole app comes alive.</p></div>';
   }
 
@@ -2083,6 +2320,27 @@ function handleTap(e){
     return;
   }
   if(act==='pdisc'){ S.practice.cur = null; save(); render(); return; }
+
+  /* putting lab */
+  if(act==='pmstimp'){ S.putt.mat.stimp = clamp(round1(S.putt.mat.stimp + parseFloat(b.dataset.d)), 6, 15); save(); render(); return; }
+  if(act==='pmhome'){  S.putt.mat.home  = clamp(round1(S.putt.mat.home  + parseFloat(b.dataset.d)), 6, 15); save(); render(); return; }
+  if(act==='pmlen'){   S.putt.mat.len   = clamp(Math.round(S.putt.mat.len + parseFloat(b.dataset.d)), 3, 60); save(); render(); return; }
+  if(act==='pmgrain'){  S.putt.mat.grain  = !S.putt.mat.grain;  save(); render(); return; }
+  if(act==='pmbreaks'){ S.putt.mat.breaks = !S.putt.mat.breaks; save(); render(); return; }
+  if(act==='plft'){ UI.plog.ft = parseFloat(b.dataset.f); render(); return; }
+  if(act==='plbr'){ UI.plog.br = b.dataset.b === 'B' ? 'B' : 'S'; render(); return; }
+  if(act==='pllog'){
+    const L = UI.plog, att = num(L.att), made = num(L.made);
+    if(att === null || att < 1){ toast('How many did you attempt?'); return; }
+    if(made === null){ toast('How many did you make?'); return; }
+    if(made > att){ toast('Made cannot beat attempted.'); return; }
+    S.putt.log.push({ d:todayISO(), ft:L.ft, made:clamp(Math.round(made),0,200), att:clamp(Math.round(att),1,200), br:L.br });
+    if(S.putt.log.length > 300) S.putt.log = S.putt.log.slice(-300);
+    UI.plog.made = null;
+    save(); render();
+    toast(Math.round(made/att*100)+'% logged. Same protocol next time.', true);
+    return;
+  }
   if(act==='unit'){ S.settings.unit = b.dataset.u; save(); render(); return; }
   if(act==='sunit'){ S.settings.sunit = b.dataset.u; save(); render(); return; }
   if(act==='win'){ S.settings.win = parseInt(b.dataset.w,10); save(); render(); return; }
@@ -2154,6 +2412,9 @@ function handleInput(e){
   if(act==='cname' && c){ c.name = b.value.slice(0,24); save(); return; }
   if(act==='chead' && c){ c.head = b.value.slice(0,40); save(); return; }
   if(act==='cshaft' && c){ c.shaft = b.value.slice(0,48); save(); return; }
+  /* held in UI, not S - nothing is stored until LOG THE TEST is tapped */
+  if(act==='plmade'){ UI.plog.made = b.value === '' ? null : parseIn(b.value); return; }
+  if(act==='platt'){  UI.plog.att  = b.value === '' ? null : parseIn(b.value); return; }
 }
 
 /* ---------- BOOT ---------- */
