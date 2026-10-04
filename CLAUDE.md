@@ -87,6 +87,30 @@ row. `puttProto()` picks the dominant (distance, break) pair by attempts and the
 trend only ever compares like with like; rows outside it render OFF PROTOCOL
 rather than being silently pooled. A make rate is only comparable against itself.
 
+## Launch targets + launch monitor import (v1.8 / v1.9)
+
+PRACTICE view carries two cards on every non-putting focus.
+
+**LAUNCH TARGETS** - `LM_TARGETS` holds NUMERIC `[lo, hi]` windows for DR / 7i / 52,
+signed target-relative (negative = LEFT). The L/R text is generated (`lmWinStr`) so
+the same table both displays and grades. Ben is a lefty: in-to-out reads L. Clubs
+without their own window borrow only the loft-independent rows (`lmTargetFor`).
+
+**LAUNCH MONITOR SESSIONS** - imports a Garmin Approach R10 range-session CSV
+(Garmin Golf app > range session > share icon). `lmParseCSV` is header-driven
+(`LM_COLS`), skips the optional `[mph]`-style units row, accepts `-7.0` or `7.0 L`,
+and maps club labels to bag keys (`lmClubKey`; named wedges go to the nearest-loft
+wedge in the bag). State is `S.lm.sessions = [{id, d, src, fed, shots}]`.
+
+- Shots are stored RAW (speeds mph, distances yd, apex ft, angles signed). Every
+  average, grade and plot is derived at render time in `sheetLm()`.
+- A session feeds the bag only through the explicit ADD SESSION MEDIANS button,
+  as ONE reading per club (`lmSessionStock`), and only once (`fed`). Never push
+  per-shot rows into `readings` - 60 shots would flood the stock median window.
+- The CSV column names and the sign convention (negative = left) were built from
+  the documented export format and a synthetic file, NOT yet a real export. Check
+  the first real file against `LM_COLS` before trusting directional grades.
+
 ## The model (how prediction works)
 
 `REFC`/`REFB` are reference carry / ball-speed curves per club family

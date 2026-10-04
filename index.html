@@ -213,6 +213,12 @@ h2.disp{
 .drillwin b{color:var(--turf); font-family:var(--mono); font-size:10px; letter-spacing:.12em; margin-right:6px}
 .seshrow{display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13.5px; align-items:center}
 .seshrow:last-child{border-bottom:0}
+button.lmses{width:100%; text-align:left; border-bottom:1px solid var(--line) !important}
+.lmrow{display:grid; grid-template-columns:1fr 84px 112px; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13.5px; align-items:center}
+.lmrow span:nth-child(n+2){font-family:var(--mono); font-size:12.5px; text-align:right}
+.lmrow.lmhead span{font-size:10px; letter-spacing:.14em; color:var(--faint)}
+.lmok{color:var(--turf); font-weight:600}
+.lmoff{color:var(--gold); font-weight:600}
 .ptiles{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px}
 .ptile{background:var(--panel); border:1px solid var(--line); padding:11px 12px 10px}
 .ptile .tlabel{font-size:9.5px; letter-spacing:.08em; color:var(--dim); text-transform:uppercase; font-family:var(--mono)}
@@ -418,6 +424,7 @@ body.boot #view>*:nth-child(6){animation-delay:.22s}
 <div id="sheet"><div id="sheetbody" role="dialog" aria-modal="true" tabindex="-1"></div></div>
 <div id="toast" role="status"></div>
 <input type="file" id="importfile" accept="application/json,.json" style="display:none">
+<input type="file" id="lmfile" accept=".csv,text/csv,text/plain" style="display:none">
 
 <script>
 'use strict';
@@ -760,6 +767,7 @@ function defaults(){
     bag: BAG_SPEC.map(mkClub),
     practice:{ log:[], cur:null },
     putt: puttDefaults(),
+    lm: { sessions: [] },
     meta:{ lastBackup:null }
   };
 }
@@ -846,6 +854,18 @@ function normalize(d){
     })
     .filter(e => e.att > 0)
     .slice(-300);
+  /* launch monitor sessions (added v1.9) - raw shots, never derived values */
+  if(!d.lm || typeof d.lm !== 'object' || Array.isArray(d.lm)) d.lm = { sessions: [] };
+  if(!Array.isArray(d.lm.sessions)) d.lm.sessions = [];
+  d.lm.sessions = d.lm.sessions
+    .filter(s => s && typeof s === 'object' && Array.isArray(s.shots))
+    .map(s => ({ id: (s.id ? String(s.id).slice(0,24) : '') || ('s' + Math.random().toString(36).slice(2,9)),
+                 d: typeof s.d === 'string' ? s.d.slice(0,10) : todayISO(),
+                 src: typeof s.src === 'string' ? s.src.slice(0,8) : 'csv',
+                 fed: !!s.fed,
+                 shots: s.shots.filter(x => x && typeof x === 'object').slice(0,400).map(lmCleanShot) }))
+    .filter(s => s.shots.length)
+    .slice(-30);
   if(!d.meta || typeof d.meta !== 'object' || Array.isArray(d.meta)) d.meta = { lastBackup:null };
   d.meta.rev = (typeof d.meta.rev === 'number' && isFinite(d.meta.rev)) ? d.meta.rev : 0;
   /* courtesy upgrade: a pristine v1 default bag (never customized, no data) becomes the real bag */
@@ -1874,24 +1894,57 @@ function puttLabHTML(){
    into a window; path / face rows are a small-draw estimate, not a measured player;
    driver spin is Ben's own 2000-2400 target. */
 const LM_ORDER = [['DR','DRIVER'],['7i','7 IRON'],['52','52 WEDGE']];
+/* Windows are NUMERIC [lo, hi], signed target-relative: negative = LEFT, positive =
+   RIGHT. The L/R text is generated from the sign (lmWinStr) so the same table grades
+   imported shots. kind: dir = L/R angle, sgn = signed angle, deg, rpm, x = ratio. */
+const LM_ROWS = [['cp','Club path','dir'],['cf','Club face','dir'],['fp','Face to path','dir'],
+                 ['ld','Launch direction','dir'],['aa','Attack angle','sgn'],['la','Launch angle','deg'],
+                 ['bk','Backspin','rpm'],['sm','Smash factor','x'],['land','Land angle','deg']];
 const LM_TARGETS = {
-  'DR': [['Club path','1 to 3 L'],['Club face','0.5 to 1.5 L'],['Face to path','0.5 to 1.5 R'],
-         ['Launch direction','0.5 to 1.5 L'],['Attack angle','+2 to +4'],['Launch angle','11 to 14'],
-         ['Backspin','2,000 to 2,400'],['Smash factor','1.48 to 1.50'],['Land angle','35 to 40']],
-  '7i': [['Club path','1 to 3 L'],['Club face','0.5 to 1.5 L'],['Face to path','0.5 to 1.5 R'],
-         ['Launch direction','0.5 to 1.5 L'],['Attack angle','-3 to -5'],['Launch angle','15 to 17'],
-         ['Backspin','6,500 to 7,500'],['Smash factor','1.33 to 1.38'],['Land angle','48 to 52']],
-  '52': [['Club path','0 to 2 L'],['Club face','0 to 1 L'],['Face to path','0 to 1 R'],
-         ['Launch direction','0 to 1 L'],['Attack angle','-4 to -6'],['Launch angle','26 to 29'],
-         ['Backspin','9,500 to 10,500'],['Smash factor','1.17 to 1.22'],['Land angle','50 to 54']]
+  'DR': {cp:[-3,-1], cf:[-1.5,-0.5], fp:[0.5,1.5], ld:[-1.5,-0.5], aa:[2,4],   la:[11,14], bk:[2000,2400],  sm:[1.48,1.50], land:[35,40]},
+  '7i': {cp:[-3,-1], cf:[-1.5,-0.5], fp:[0.5,1.5], ld:[-1.5,-0.5], aa:[-5,-3], la:[15,17], bk:[6500,7500],  sm:[1.33,1.38], land:[48,52]},
+  '52': {cp:[-2,0],  cf:[-1,0],      fp:[0,1],     ld:[-1,0],      aa:[-6,-4], la:[26,29], bk:[9500,10500], sm:[1.17,1.22], land:[50,54]}
 };
+function lmWinStr(kind, w){
+  if(kind === 'dir'){
+    if(w[1] <= 0) return (-w[1])+' to '+(-w[0])+' L';
+    if(w[0] >= 0) return w[0]+' to '+w[1]+' R';
+    return (-w[0])+' L to '+w[1]+' R';
+  }
+  if(kind === 'sgn'){
+    const a = w.slice().sort((p,q) => Math.abs(p)-Math.abs(q)), sg = v => (v>0?'+':'')+v;
+    return sg(a[0])+' to '+sg(a[1]);
+  }
+  if(kind === 'rpm') return w[0].toLocaleString('en-US')+' to '+w[1].toLocaleString('en-US');
+  if(kind === 'x') return w[0].toFixed(2)+' to '+w[1].toFixed(2);
+  return w[0]+' to '+w[1];
+}
+function lmValStr(kind, v){
+  if(v === null || v === undefined) return '-';
+  if(kind === 'dir') return round1(Math.abs(v))+(v < -0.05 ? ' L' : (v > 0.05 ? ' R' : ''));
+  if(kind === 'sgn') return (v>0?'+':'')+round1(v);
+  if(kind === 'rpm') return Math.round(v).toLocaleString('en-US');
+  if(kind === 'x') return v.toFixed(2);
+  return String(round1(v));
+}
+/* Full window for the three target clubs. Every other club borrows only the
+   rows that do not depend on loft (path / face, plus attack angle off the turf). */
+function lmTargetFor(key){
+  if(LM_TARGETS[key]) return LM_TARGETS[key];
+  const c = S.bag.find(b => b.key === key);
+  const t = c ? c.type : (/W$/.test(key) ? 'wood' : 'iron');
+  const src = LM_TARGETS[t==='wood' ? 'DR' : (t==='wedge' ? '52' : '7i')];
+  const o = {cp:src.cp, cf:src.cf, fp:src.fp, ld:src.ld};
+  if(t !== 'wood') o.aa = src.aa;
+  return o;
+}
 
 function lmTargetsHTML(){
   const k = LM_TARGETS[UI.lmt] ? UI.lmt : 'DR';
   let h = '<div class="card pad"><div class="eyebrow">LAUNCH TARGETS - LEFTY DRAW</div><div class="segrow">';
   for(const o of LM_ORDER) h += '<button class="seg'+(k===o[0]?' on':'')+'" data-act="lmt" data-k="'+o[0]+'">'+o[1]+'</button>';
   h += '</div>';
-  for(const r of LM_TARGETS[k]) h += '<div class="wrow"><span>'+r[0]+'</span><span class="mono"><b>'+r[1]+'</b></span></div>';
+  for(const r of LM_ROWS) h += '<div class="wrow"><span>'+r[1]+'</span><span class="mono"><b>'+lmWinStr(r[2], LM_TARGETS[k][r[0]])+'</b></span></div>';
   const c = S.bag.find(b => b.key === k);
   const st = c ? stockOf(c) : null;
   if(st && st.c !== null){
@@ -1901,6 +1954,260 @@ function lmTargetsHTML(){
   h += '<p class="bodytext dim small">Check in order: path, face to path, attack angle, then launch and spin. '
     + 'Angles in degrees, spin in rpm. A sim mat under-reads wedge spin.</p></div>';
   return h;
+}
+
+/* ---------- LAUNCH MONITOR IMPORT (Garmin R10 range-session CSV) ----------
+   S.lm.sessions = [{id, d, src, fed, shots:[{k, cn, <LM_FIELDS>}]}].
+   Shots are stored RAW and lossless; every average, grade and plot is derived at
+   render time, so the scoring rules can change without touching a stored row.
+   Angles are signed target-relative (negative = left). Speeds mph, distances yards,
+   apex feet. k = bag key ('' when the club is not in the bag), cn = the CSV's label. */
+const LM_FIELDS = ['cs','aa','cp','cf','fp','bs','la','ld','bk','sd','ax','ap','c','cd','t','td'];
+const LM_COLS = { clubspeed:'cs', attackangle:'aa', clubpath:'cp', clubface:'cf', facetopath:'fp',
+  ballspeed:'bs', launchangle:'la', launchdirection:'ld', backspin:'bk', sidespin:'sd', spinaxis:'ax',
+  apexheight:'ap', carrydistance:'c', carrydeviationdistance:'cd', totaldistance:'t',
+  totaldeviationdistance:'td' };
+
+function lmCleanShot(x){
+  const o = { k: typeof x.k === 'string' ? x.k.slice(0,4) : '', cn: typeof x.cn === 'string' ? x.cn.slice(0,20) : '' };
+  for(const f of LM_FIELDS) o[f] = num(x[f]);
+  return o;
+}
+
+/* quoted-field CSV reader; comma or semicolon delimited (European exports) */
+function csvRows(text){
+  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const first = text.split(/\r?\n/)[0] || '';
+  const delim = (first.split(';').length > first.split(',').length) ? ';' : ',';
+  const rows = []; let row = [], cur = '', q = false;
+  for(let i=0; i<text.length; i++){
+    const ch = text[i];
+    if(q){
+      if(ch === '"'){ if(text[i+1] === '"'){ cur += '"'; i++; } else q = false; }
+      else cur += ch;
+    } else if(ch === '"') q = true;
+    else if(ch === delim){ row.push(cur); cur = ''; }
+    else if(ch === '\n' || ch === '\r'){
+      if(ch === '\r' && text[i+1] === '\n') i++;
+      row.push(cur); cur = '';
+      if(row.some(v => v.trim() !== '')) rows.push(row);
+      row = [];
+    } else cur += ch;
+  }
+  row.push(cur);
+  if(row.some(v => v.trim() !== '')) rows.push(row);
+  return rows;
+}
+
+/* "7.0 L" / "4.7 R" / "-7.0" / "7,0" -> signed number, left negative */
+function lmNum(v){
+  if(v === null || v === undefined) return null;
+  let s = String(v).trim();
+  if(!s) return null;
+  const m = s.match(/\s*([LR])$/i);
+  if(m) s = s.slice(0, m.index);
+  const x = parseFloat(s.replace(',', '.'));
+  if(!isFinite(x)) return null;
+  return m ? Math.abs(x) * (m[1].toUpperCase() === 'L' ? -1 : 1) : x;
+}
+
+/* CSV club label -> bag key. Named wedges resolve to the nearest-loft wedge in the bag. */
+function lmClubKey(name){
+  const s = String(name || '').toLowerCase().trim();
+  const inBag = k => S.bag.some(b => b.key === k) ? k : '';
+  const wedgeNear = L => {
+    let best = null;
+    for(const b of S.bag) if(b.type === 'wedge' && b.key !== 'PW' && (!best || Math.abs(b.loft-L) < Math.abs(best.loft-L))) best = b;
+    return best && Math.abs(best.loft-L) <= 3 ? best.key : '';
+  };
+  let m;
+  if(/driver/.test(s) || s === 'dr') return inBag('DR');
+  if((m = s.match(/(\d+)\s*-?\s*(wood|w)\b/))) return inBag(m[1]+'W');
+  if((m = s.match(/(\d+)\s*-?\s*(hybrid|h)\b/))) return inBag(m[1]+'H');
+  if((m = s.match(/(\d+)\s*-?\s*(iron|i)\b/))) return inBag(m[1]+'i');
+  if(/pitching/.test(s) || s === 'pw') return inBag('PW');
+  if((m = s.match(/(\d{2})/))) return wedgeNear(+m[1]);
+  if(/gap|approach/.test(s) || s === 'gw' || s === 'aw') return wedgeNear(52);
+  if(/sand/.test(s) || s === 'sw') return wedgeNear(56);
+  if(/lob/.test(s) || s === 'lw') return wedgeNear(60);
+  return '';
+}
+
+function lmParseCSV(text){
+  const rows = csvRows(text);
+  if(rows.length < 2) return null;
+  const hk = rows[0].map(h => h.toLowerCase().replace(/[^a-z]/g, ''));
+  const col = {};
+  hk.forEach((h, i) => { if(LM_COLS[h] && col[LM_COLS[h]] === undefined) col[LM_COLS[h]] = i; });
+  if(col.c === undefined && col.bs === undefined) return null;
+  const iClub = hk.indexOf('clubtype') >= 0 ? hk.indexOf('clubtype') : (hk.indexOf('clubname') >= 0 ? hk.indexOf('clubname') : hk.indexOf('club'));
+  const iDate = hk.indexOf('date');
+  /* optional units row: "[mph]", "[yd]", "[deg]" ... */
+  let start = 1, unit = {};
+  if(rows[1].filter(v => /^\s*\[.*\]\s*$/.test(v)).length >= 3){
+    start = 2;
+    for(const f in col) unit[f] = String(rows[1][col[f]] || '').toLowerCase().replace(/[\[\]\s]/g, '');
+  }
+  const conv = (f, v) => {
+    if(v === null) return null;
+    const u = unit[f] || '';
+    if(f === 'cs' || f === 'bs'){ if(u === 'km/h' || u === 'kph') return v / KMH_PER_MPH; if(u === 'm/s') return v * 2.236936; return v; }
+    if(f === 'c' || f === 'cd' || f === 't' || f === 'td'){ if(u === 'm') return v / M_PER_YD; if(u === 'ft') return v / 3; return v; }
+    if(f === 'ap'){ if(u === 'm') return v / M_PER_FT; if(u === 'yd') return v * 3; return v; }
+    return v;
+  };
+  const shots = [];
+  let d = null;
+  for(let r = start; r < rows.length && shots.length < 400; r++){
+    const row = rows[r];
+    const o = { k:'', cn: iClub >= 0 ? String(row[iClub] || '').trim().slice(0,20) : '' };
+    for(const f of LM_FIELDS) o[f] = col[f] !== undefined ? conv(f, lmNum(row[col[f]])) : null;
+    if(o.c === null && o.bs === null) continue;
+    if(o.c !== null && (o.c < 1 || o.c > 450)) continue;
+    o.k = lmClubKey(o.cn);
+    shots.push(o);
+    if(!d && iDate >= 0){
+      const t = new Date(String(row[iDate] || '').trim());
+      if(isFinite(t.getTime())) d = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+    }
+  }
+  if(!shots.length) return null;
+  d = d || todayISO();
+  const sum = shots.reduce((a, s) => a + (s.c || 0) + (s.bs || 0), 0);
+  return { id: ('r'+d+'_'+shots.length+'_'+Math.round(sum)).slice(0,24), d, src:'r10', fed:false, shots };
+}
+
+function lmFind(id){ return S.lm.sessions.find(s => s.id === id) || null; }
+function lmGroupKey(s){ return s.k || s.cn || '?'; }
+function lmGroups(ses){
+  const g = {};
+  for(const s of ses.shots){ const k = lmGroupKey(s); (g[k] = g[k] || []).push(s); }
+  return Object.keys(g).map(k => ({k, shots:g[k]})).sort((a,b) => b.shots.length - a.shots.length);
+}
+function lmStat(vals){
+  const a = vals.filter(v => v !== null && v !== undefined);
+  if(!a.length) return null;
+  const mean = a.reduce((x,y) => x+y, 0) / a.length;
+  const sd = Math.sqrt(a.reduce((x,y) => x + (y-mean)*(y-mean), 0) / a.length);
+  return { n:a.length, mean, sd, min:Math.min.apply(null, a), max:Math.max.apply(null, a) };
+}
+function lmVal(s, f){
+  if(f === 'sm') return (s.bs !== null && s.cs !== null && s.cs > 0) ? s.bs / s.cs : null;
+  return s[f] === undefined ? null : s[f];
+}
+
+/* What ONE imported session contributes to a club's bag readings.
+   Policy lives here on purpose: it decides which shots count as "stock".
+   Default = the median of every shot (a median already shrugs off a few mishits). */
+function lmSessionStock(shots){
+  const med = f => { const a = shots.map(s => s[f]).filter(v => v !== null); return a.length ? round1(median(a)) : null; };
+  return { c: med('c'), b: med('bs'), s: med('cs') };
+}
+
+function lmDispSVG(shots){
+  const pts = shots.filter(s => s.c !== null && s.cd !== null);
+  if(pts.length < 2) return '';
+  const W=340, H=250, mL=30, mR=10, mT=10, mB=22;
+  const xm = Math.max(20, Math.ceil(Math.max.apply(null, pts.map(s => Math.abs(s.cd))) / 10) * 10);
+  const cs = pts.map(s => s.c);
+  const yLo = Math.floor((Math.min.apply(null, cs) - 5) / 10) * 10, yHi = Math.ceil((Math.max.apply(null, cs) + 5) / 10) * 10;
+  const X = v => mL + (v + xm) / (2*xm) * (W-mL-mR);
+  const Y = v => mT + (yHi - v) / (yHi - yLo) * (H-mT-mB);
+  const step = (yHi - yLo) > 80 ? 20 : 10;
+  let g = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Carry dispersion" style="display:block; margin-top:10px">';
+  for(let y = yLo; y <= yHi; y += step){
+    g += '<line x1="'+mL+'" y1="'+Y(y).toFixed(1)+'" x2="'+(W-mR)+'" y2="'+Y(y).toFixed(1)+'" stroke="var(--line)" stroke-width="1"/>'
+      + '<text x="'+(mL-5)+'" y="'+(Y(y)+3.5).toFixed(1)+'" text-anchor="end" font-size="9.5" fill="var(--faint)" font-family="var(--mono)">'+Math.round(d2u(y))+'</text>';
+  }
+  for(const v of [-10, 10]) g += '<line x1="'+X(v).toFixed(1)+'" y1="'+mT+'" x2="'+X(v).toFixed(1)+'" y2="'+(H-mB)+'" stroke="var(--line2)" stroke-width="1" stroke-dasharray="3 4"/>';
+  g += '<line x1="'+X(0).toFixed(1)+'" y1="'+mT+'" x2="'+X(0).toFixed(1)+'" y2="'+(H-mB)+'" stroke="var(--dim)" stroke-width="1"/>';
+  for(const s of pts) g += '<circle cx="'+X(s.cd).toFixed(1)+'" cy="'+Y(s.c).toFixed(1)+'" r="3.6" fill="var(--chartc)" opacity=".8"/>';
+  const lab = (x, t, anc) => '<text x="'+x+'" y="'+(H-6)+'" text-anchor="'+anc+'" font-size="9.5" fill="var(--faint)" font-family="var(--mono)">'+t+'</text>';
+  g += lab(mL, Math.round(d2u(xm))+' L', 'start') + lab(X(0).toFixed(1), 'TARGET', 'middle') + lab(W-mR, Math.round(d2u(xm))+' R', 'end');
+  return g + '</svg>';
+}
+
+function lmCardHTML(){
+  let h = '<div class="card pad"><div class="eyebrow">LAUNCH MONITOR SESSIONS</div>';
+  const list = S.lm.sessions.slice().reverse();
+  for(const ses of list){
+    const clubs = lmGroups(ses).map(g => g.k).slice(0,4).join(' ');
+    h += '<button class="seshrow lmses" data-act="lmopen" data-id="'+esc(ses.id)+'"><span>'+esc(fmtDate(ses.d))+' - '+ses.shots.length+' shots</span>'
+      + '<span class="mono dim">'+esc(clubs)+' &rsaquo;</span></button>';
+  }
+  h += '<button class="bigadd" data-act="lmimport">IMPORT R10 CSV</button>'
+    + '<p class="bodytext dim small">Garmin Golf app: open a range session, tap the share icon next to the shot count, save the CSV, then pick it here. Every shot is graded against the launch targets.</p></div>';
+  return h;
+}
+
+function sheetLm(){
+  const ses = lmFind(UI.sheet.id);
+  if(!ses){ closeSheet(); return; }
+  const groups = lmGroups(ses);
+  const cur = groups.find(g => g.k === UI.lmClub) || groups[0];
+  const shots = cur.shots;
+  const bagClub = S.bag.find(b => b.key === cur.k);
+  let h = '<div class="shead"><b>'+esc(fmtDate(ses.d))+' range session</b><button class="ghost" data-act="closesheet">CLOSE</button></div>'
+    + '<div class="gearline mono">'+ses.shots.length+' SHOTS - GARMIN R10 CSV</div><div class="segrow">';
+  for(const g of groups) h += '<button class="seg'+(g.k===cur.k?' on':'')+'" data-act="lmclub" data-k="'+esc(g.k)+'">'+esc(g.k)+' <span class="dim">'+g.shots.length+'</span></button>';
+  h += '</div>';
+
+  /* averages vs target windows */
+  const tg = lmTargetFor(cur.k);
+  h += '<div class="sheetsec"><div class="eyebrow">'+esc(bagClub ? bagClub.name : cur.k)+' - AVERAGE VS TARGET</div>'
+    + '<div class="lmrow lmhead"><span></span><span>YOU</span><span>TARGET</span></div>';
+  for(const r of LM_ROWS){
+    const st = lmStat(shots.map(s => lmVal(s, r[0])));
+    const w = tg[r[0]];
+    if(!st && !w) continue;
+    const cls = (st && w) ? (st.mean >= w[0]-1e-9 && st.mean <= w[1]+1e-9 ? ' lmok' : ' lmoff') : '';
+    h += '<div class="lmrow"><span>'+r[1]+'</span><span class="'+cls.trim()+'">'+(st ? lmValStr(r[2], st.mean) : '-')+'</span>'
+      + '<span class="dim">'+(w ? lmWinStr(r[2], w) : '-')+'</span></div>';
+  }
+  const sc = lmStat(shots.map(s => s.c)), sb = lmStat(shots.map(s => s.bs)), ss = lmStat(shots.map(s => s.cs));
+  h += '<p class="bodytext dim small">'
+    + (sc ? 'Carry avg <b class="mono">'+fmtD(sc.mean)+' '+dLab()+'</b> ('+fmtD(sc.min)+' to '+fmtD(sc.max)+')' : '')
+    + (sb ? ' - ball <b class="mono">'+fmtS(sb.mean)+' '+sLab()+'</b>' : '')
+    + (ss ? ' - club <b class="mono">'+fmtS(ss.mean)+' '+sLab()+'</b>' : '')
+    + '</p></div>';
+
+  /* two-way miss: where the path sits, and how far the face wanders around it */
+  const sp = lmStat(shots.map(s => s.cp)), sf = lmStat(shots.map(s => s.fp)), sd = lmStat(shots.map(s => s.cd));
+  if(sp || sf || sd){
+    h += '<div class="sheetsec"><div class="eyebrow">TWO-WAY MISS</div>';
+    if(sp) h += '<div class="wrow"><span>Path average</span><span class="mono"><b>'+lmValStr('dir', sp.mean)+'</b> <span class="dim">+/- '+round1(sp.sd)+'</span></span></div>';
+    if(sf) h += '<div class="wrow"><span>Face to path range</span><span class="mono"><b>'+lmValStr('dir', sf.min)+' to '+lmValStr('dir', sf.max)+'</b></span></div>'
+      + '<div class="wrow"><span>Face to path spread</span><span class="mono"><b>+/- '+round1(sf.sd)+'</b></span></div>';
+    if(sd){
+      const dv = shots.map(s => s.cd).filter(v => v !== null);
+      const L = dv.filter(v => v < -10).length, R = dv.filter(v => v > 10).length;
+      h += '<div class="wrow"><span>Missed 10+ '+dLab()+' left / on line / right</span><span class="mono"><b>'+L+' / '+(dv.length-L-R)+' / '+R+'</b></span></div>';
+    }
+    if(shots.length >= 20 && sp){
+      for(let i=0; i<shots.length; i+=10){
+        const blk = shots.slice(i, i+10);
+        if(blk.length < 5) break;
+        const bp = lmStat(blk.map(s => s.cp)), bf = lmStat(blk.map(s => s.fp));
+        if(!bp) continue;
+        h += '<div class="wrow"><span class="dim">Shots '+(i+1)+'-'+(i+blk.length)+'</span><span class="mono">path '+lmValStr('dir', bp.mean)
+          + (bf ? ' <span class="dim">/ f2p +/- '+round1(bf.sd)+'</span>' : '')+'</span></div>';
+      }
+    }
+    h += '<p class="bodytext dim small">A big path with a wide face-to-path range is the two-way miss. Shrink the path first; the spread is what to watch after that.</p></div>';
+  }
+
+  const svg = lmDispSVG(shots);
+  if(svg) h += '<div class="sheetsec"><div class="eyebrow">CARRY DISPERSION ('+dLab().toUpperCase()+')</div>'+svg+'</div>';
+
+  const mapped = groups.filter(g => S.bag.some(b => b.key === g.k));
+  h += '<div class="sheetsec">';
+  if(mapped.length){
+    h += '<button class="bigadd" data-act="lmfeed"'+(ses.fed ? ' disabled style="opacity:.45"' : '')+'>'
+      + (ses.fed ? 'MEDIANS ALREADY IN BAG' : 'ADD SESSION MEDIANS TO BAG ('+mapped.length+' CLUB'+(mapped.length>1?'S':'')+')')+'</button>'
+      + '<p class="bodytext dim small">Logs ONE reading per club (median carry, ball and club speed) so a 60-shot session cannot flood your stock numbers.</p>';
+  }
+  h += '<div style="text-align:right"><button class="ghost danger" data-act="lmdel">'+(UI.confirm==='lmdel'+ses.id ? 'SURE? TAP AGAIN' : 'DELETE SESSION')+'</button></div></div>';
+  el('sheetbody').innerHTML = h;
 }
 
 function renderPractice(){
@@ -1920,7 +2227,7 @@ function renderPractice(){
     + '<button class="bigadd" data-act="pbuild">'+(P.cur?'REBUILD (NEW DRILLS)':'BUILD MY SESSION')+'</button></div>';
 
   if(UI.pfocus==='putting') h += puttLabHTML();
-  else h += lmTargetsHTML();
+  else h += lmTargetsHTML() + lmCardHTML();
 
   const M = buildModel();
   if(!M.fc && UI.pfocus!=='gap' && UI.pfocus!=='putting' && !P.cur){
@@ -2050,6 +2357,7 @@ function sheetRender(){
   if(!UI.sheet) return;
   if(UI.sheet.k === 'club') sheetClub();
   else if(UI.sheet.k === 'add') sheetAdd();
+  else if(UI.sheet.k === 'lm') sheetLm();
 }
 
 function findClub(id){ return S.bag.find(c => c.id === id) || null; }
@@ -2238,7 +2546,7 @@ function handleTap(e){
   if(!b) return;
   const act = b.dataset.act;
   /* two-step confirms reset when you tap anything else */
-  if(UI.confirm && act !== 'crem' && act !== 'reset' && act !== 'rebag' && act !== 'eqapply' && act !== 'eqpick'){
+  if(UI.confirm && act !== 'crem' && act !== 'reset' && act !== 'rebag' && act !== 'eqapply' && act !== 'eqpick' && act !== 'lmdel'){
     UI.confirm = null;
     /* these acts have no handleTap branch, so nothing would repaint the
        now-stale "SURE? TAP AGAIN" label without this */
@@ -2248,6 +2556,36 @@ function handleTap(e){
   if(act==='club'){ UI.sheet = {k:'club', id:b.dataset.id}; UI.swTag = 'full'; openSheet(); return; }
   if(act==='addclub'){ UI.sheet = {k:'add'}; openSheet(); return; }
   if(act==='closesheet'){ closeSheet(); return; }
+
+  /* launch monitor sessions */
+  if(act==='lmimport'){ el('lmfile').click(); return; }
+  if(act==='lmopen'){ UI.sheet = {k:'lm', id:b.dataset.id}; UI.lmClub = null; openSheet(); return; }
+  if(act==='lmclub'){ UI.lmClub = b.dataset.k; sheetRender(); return; }
+  if(act==='lmdel' || act==='lmfeed'){
+    const ses = UI.sheet && UI.sheet.k==='lm' ? lmFind(UI.sheet.id) : null;
+    if(!ses) return;
+    if(act==='lmdel'){
+      if(UI.confirm !== 'lmdel'+ses.id){ UI.confirm = 'lmdel'+ses.id; sheetRender(); return; }
+      S.lm.sessions = S.lm.sessions.filter(s => s.id !== ses.id);
+      save(); closeSheet(); toast('Session deleted.');
+      return;
+    }
+    if(ses.fed) return;
+    let n = 0;
+    for(const g of lmGroups(ses)){
+      const club = S.bag.find(c => c.key === g.k);
+      if(!club) continue;
+      const st = lmSessionStock(g.shots);
+      if(st.c === null && st.b === null && st.s === null) continue;
+      club.readings.push({d: ses.d, c: st.c, b: st.b, s: st.s});
+      if(club.readings.length > 60) club.readings = club.readings.slice(-60);
+      n++;
+    }
+    ses.fed = true;
+    save(); sheetRender();
+    toast(n + ' club' + (n===1?'':'s') + ' updated in the bag.', true);
+    return;
+  }
 
   const c = UI.sheet && UI.sheet.k==='club' ? findClub(UI.sheet.id) : null;
 
@@ -2541,6 +2879,27 @@ function handleInput(e){
         toast('Backup imported.', true);
       }catch(err){ toast('That file isn\u2019t a Yardage Book backup.'); }
       e.target.value = '';
+    };
+    rd.onerror = () => { toast('Could not read that file.'); e.target.value = ''; };
+    rd.readAsText(f);
+  });
+
+  el('lmfile').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      let ses = null;
+      try{ ses = lmParseCSV(String(rd.result)); }catch(err){ ses = null; }
+      e.target.value = '';
+      if(!ses){ toast('No shots found - is that a range-session CSV?'); return; }
+      const dupe = S.lm.sessions.some(s => s.id === ses.id);
+      S.lm.sessions = S.lm.sessions.filter(s => s.id !== ses.id);
+      S.lm.sessions.push(ses);
+      if(S.lm.sessions.length > 30) S.lm.sessions = S.lm.sessions.slice(-30);
+      save();
+      UI.sheet = {k:'lm', id:ses.id}; UI.lmClub = null; openSheet();
+      toast(dupe ? 'Session re-imported.' : ses.shots.length + ' shots imported.', true);
     };
     rd.onerror = () => { toast('Could not read that file.'); e.target.value = ''; };
     rd.readAsText(f);
