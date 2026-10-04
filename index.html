@@ -1866,6 +1866,43 @@ function puttLabHTML(){
   return h;
 }
 
+/* ---------- LAUNCH TARGETS (PRACTICE view) ----------
+   Ideal launch-monitor windows for a small stock draw. L/R are LEFTY labels exactly
+   as a launch-monitor app prints them (in-to-out reads L for a lefty).
+   Static, speed-independent rows only - carry and ball speed are quoted live from
+   the bag, never typed into this table. Sources: TrackMan PGA Tour averages widened
+   into a window; path / face rows are a small-draw estimate, not a measured player;
+   driver spin is Ben's own 2000-2400 target. */
+const LM_ORDER = [['DR','DRIVER'],['7i','7 IRON'],['52','52 WEDGE']];
+const LM_TARGETS = {
+  'DR': [['Club path','1 to 3 L'],['Club face','0.5 to 1.5 L'],['Face to path','0.5 to 1.5 R'],
+         ['Launch direction','0.5 to 1.5 L'],['Attack angle','+2 to +4'],['Launch angle','11 to 14'],
+         ['Backspin','2,000 to 2,400'],['Smash factor','1.48 to 1.50'],['Land angle','35 to 40']],
+  '7i': [['Club path','1 to 3 L'],['Club face','0.5 to 1.5 L'],['Face to path','0.5 to 1.5 R'],
+         ['Launch direction','0.5 to 1.5 L'],['Attack angle','-3 to -5'],['Launch angle','15 to 17'],
+         ['Backspin','6,500 to 7,500'],['Smash factor','1.33 to 1.38'],['Land angle','48 to 52']],
+  '52': [['Club path','0 to 2 L'],['Club face','0 to 1 L'],['Face to path','0 to 1 R'],
+         ['Launch direction','0 to 1 L'],['Attack angle','-4 to -6'],['Launch angle','26 to 29'],
+         ['Backspin','9,500 to 10,500'],['Smash factor','1.17 to 1.22'],['Land angle','50 to 54']]
+};
+
+function lmTargetsHTML(){
+  const k = LM_TARGETS[UI.lmt] ? UI.lmt : 'DR';
+  let h = '<div class="card pad"><div class="eyebrow">LAUNCH TARGETS - LEFTY DRAW</div><div class="segrow">';
+  for(const o of LM_ORDER) h += '<button class="seg'+(k===o[0]?' on':'')+'" data-act="lmt" data-k="'+o[0]+'">'+o[1]+'</button>';
+  h += '</div>';
+  for(const r of LM_TARGETS[k]) h += '<div class="wrow"><span>'+r[0]+'</span><span class="mono"><b>'+r[1]+'</b></span></div>';
+  const c = S.bag.find(b => b.key === k);
+  const st = c ? stockOf(c) : null;
+  if(st && st.c !== null){
+    h += '<div class="wrow"><span>Your stock</span><span class="mono dim">'+fmtD(st.c)+' '+dLab()
+      + (st.b !== null ? ' / '+fmtS(st.b)+' '+sLab() : '')+'</span></div>';
+  }
+  h += '<p class="bodytext dim small">Check in order: path, face to path, attack angle, then launch and spin. '
+    + 'Angles in degrees, spin in rpm. A sim mat under-reads wedge spin.</p></div>';
+  return h;
+}
+
 function renderPractice(){
   const P = S.practice;
   let h = clusterHTML();
@@ -1883,6 +1920,7 @@ function renderPractice(){
     + '<button class="bigadd" data-act="pbuild">'+(P.cur?'REBUILD (NEW DRILLS)':'BUILD MY SESSION')+'</button></div>';
 
   if(UI.pfocus==='putting') h += puttLabHTML();
+  else h += lmTargetsHTML();
 
   const M = buildModel();
   if(!M.fc && UI.pfocus!=='gap' && UI.pfocus!=='putting' && !P.cur){
@@ -2302,6 +2340,7 @@ function handleTap(e){
 
   if(act==='pmins'){ UI.pmins = parseInt(b.dataset.m,10); render(); return; }
   if(act==='pfocus'){ UI.pfocus = b.dataset.f; render(); return; }
+  if(act==='lmt'){ UI.lmt = b.dataset.k; render(); return; }
   if(act==='pbuild'){
     const seed = Math.floor(Math.random()*2147483647);
     const plan = planSession(UI.pfocus, UI.pmins, seed);
