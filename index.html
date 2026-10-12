@@ -754,6 +754,9 @@ const ACCENTS = [
 /* ---------- STATE + STORAGE ---------- */
 
 const KEY = 'yb-data-v1';
+/* The build number shown in the app. Keep it equal to VER in sw.js (minus the
+   'yb-v' prefix) - it is the only way to tell from the phone which build is running. */
+const APP_VER = '1.10.1';
 const GF_KEY = 'gf-data-v1';   /* Ground Force data - READ ONLY, never write */
 let S = null;
 let BOOT_NOTE = null;   /* set by a migration inside normalize(); boot() saves + announces it */
@@ -1249,7 +1252,7 @@ function renderBag(){
   if(M.fc && M.nC < bag.length){
     h += '<p class="small dim" style="padding:0 2px 8px">Faint numbers are the model\u2019s estimates for clubs you haven\u2019t logged yet \u2014 tap a club to put real numbers on it.</p>';
   }
-  h += '<div class="foot">YARDAGE BOOK \u00b7 GROUND FORCE COMPANION</div>';
+  h += '<div class="foot">YARDAGE BOOK v'+APP_VER+' \u00b7 GROUND FORCE COMPANION</div>';
   el('view').innerHTML = h;
 }
 
@@ -2479,10 +2482,15 @@ function renderTune(){
     + '<p class="bodytext dim small">On iPhone, EXPORT JSON lands in Files where nothing else can reach it \u2014 use COPY JSON instead and paste it wherever you need it.</p>'
     + '<div class="segrow"><button class="seg danger" data-act="reset">'+(UI.confirm==='reset'?'TAP AGAIN TO WIPE EVERYTHING':'RESET ALL DATA')+'</button></div></div>';
 
+  h += '<div class="card pad"><div class="eyebrow">APP</div>'
+    + '<div class="wrow"><span>Build</span><span class="mono">v'+APP_VER+'</span></div>'
+    + '<p class="bodytext dim small">New builds load on their own when you open the app online. If it ever looks behind, this pulls a fresh copy. Your data is not touched.</p>'
+    + '<div class="segrow"><button class="seg" data-act="appupdate">CHECK FOR UPDATE</button></div></div>';
+
   h += '<div class="card pad"><div class="eyebrow">COMPANION</div>'
     + '<p class="bodytext dim small">Yardage Book pairs with <a href="https://benvmorse314.github.io/ground-force/" style="color:var(--accent)">Ground Force</a> \u2014 the speed you build in the gym shows up here as carry. Log range sessions after speed blocks and watch the trend arrows.</p></div>';
 
-  h += '<div class="foot">YARDAGE BOOK V1</div>';
+  h += '<div class="foot">YARDAGE BOOK v'+APP_VER+'</div>';
   el('view').innerHTML = h;
 }
 
@@ -2908,6 +2916,19 @@ function handleTap(e){
     return;
   }
   if(act==='import'){ el('importfile').click(); return; }
+  if(act==='appupdate'){
+    /* reload() re-requests the page, and the worker answers navigations straight
+       from the network - so this always lands on the newest deployed build */
+    flushSave();
+    toast('Checking for a new build...');
+    const go = () => location.reload();
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.getRegistration()
+        .then(r => r ? r.update() : null).catch(() => {})
+        .then(() => setTimeout(go, 1200));
+    } else setTimeout(go, 300);
+    return;
+  }
   if(act==='reset'){
     if(UI.confirm === 'reset'){
       UI.confirm = null; S = defaults(); save(); applyAccent(); render(); toast('Fresh start.');
@@ -3054,6 +3075,15 @@ function handleInput(e){
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+    /* iOS resumes a home-screen app without navigating, so the browser never
+       re-checks the worker by itself. Ask on every return to the foreground (at
+       most once a minute); a newer worker then reloads this window into its build. */
+    let swAsked = 0;
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState !== 'visible' || Date.now() - swAsked < 60000) return;
+      swAsked = Date.now();
+      navigator.serviceWorker.getRegistration().then(r => r ? r.update() : null).catch(()=>{});
+    });
   }
 
   setTimeout(()=>{ const s = el('splash'); if(s){ s.classList.add('hide'); setTimeout(()=>s.remove(), 550); } }, 650);

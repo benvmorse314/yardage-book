@@ -168,8 +168,33 @@ override per club via the AUTO toggle.
    or HTML entities. Ben's toolchain garbles raw non-ASCII through cp1252.
 4. **Stay single-file + sidecars.** No frameworks, no build step, no CDN
    dependencies. The app must work offline once cached.
-5. After editing `sw.js`-cached assets, bump the `VER` constant in `sw.js` or
-   installed clients keep serving the old build.
+5. **Every deploy bumps TWO numbers together:** `VER` in `sw.js` (`yb-vX.Y.Z`) and
+   `APP_VER` in `index.html` (`X.Y.Z`). `APP_VER` is printed in the BAG and TUNE
+   footers and is the only way to tell from the phone which build is running.
+   A byte-changed `sw.js` is also what TRIGGERS the update on installed phones
+   (see below), so a deploy that forgets the bump never reaches them.
+6. **How a new build reaches an installed iPhone (v1.10.1 - do not weaken):**
+   - `install` fetches the shell with `cache: 'reload'`. GitHub Pages serves
+     `max-age=600`; a plain `addAll()` once stored a ten-minute-stale
+     `index.html` as the offline shell, and a flaky connection kept falling back
+     to it.
+   - Navigations are answered with `fetch(url, {cache: 'no-store'})`, falling
+     back to the cached shell only when offline.
+   - On `activate`, if an older `yb-` cache existed (an UPDATE), the worker calls
+     `client.navigate(client.url)` on every open window. A home-screen app has no
+     reload button; without this the new build waits for a force-quit. The page
+     flushes its pending save on `pagehide`, so the reload is data-safe.
+   - The page asks `registration.update()` on every return to the foreground
+     (max once a minute) because iOS RESUMES a home-screen app without navigating.
+   - TUNE > APP > CHECK FOR UPDATE is the manual escape hatch.
+7. **Cache Storage is per ORIGIN, and this origin is shared with Ground Force.**
+   The worker only ever deletes caches starting `yb-`. (Until v1.10.1 it deleted
+   every cache that was not its own, wiping Ground Force's offline shell on each
+   Yardage Book deploy.)
+8. **Testing the worker:** the built-in Browser pane cannot register a service
+   worker at all (hidden pane). Use Claude in Chrome on localhost:8124. To test
+   an upgrade: `git stash` (serve the old build), load it, `git stash pop`, then
+   call `registration.update()` from the OLD page and confirm it reloads itself.
 
 ## Deploy loop (PowerShell)
 
