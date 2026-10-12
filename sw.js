@@ -3,7 +3,7 @@
    APP_VER in index.html - that is the build number shown in the app. */
 'use strict';
 
-const VER = 'yb-v1.10.1';
+const VER = 'yb-v1.10.2';
 /* This origin is shared with Ground Force, and Cache Storage is per ORIGIN, not per
    worker scope. Only ever touch caches that carry our own prefix. */
 const PREFIX = 'yb-';

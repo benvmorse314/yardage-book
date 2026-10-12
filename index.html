@@ -756,7 +756,7 @@ const ACCENTS = [
 const KEY = 'yb-data-v1';
 /* The build number shown in the app. Keep it equal to VER in sw.js (minus the
    'yb-v' prefix) - it is the only way to tell from the phone which build is running. */
-const APP_VER = '1.10.1';
+const APP_VER = '1.10.2';
 const GF_KEY = 'gf-data-v1';   /* Ground Force data - READ ONLY, never write */
 let S = null;
 let BOOT_NOTE = null;   /* set by a migration inside normalize(); boot() saves + announces it */
@@ -781,7 +781,7 @@ function puttDefaults(){
 function defaults(){
   return {
     v:1,
-    settings:{ accent:'#3E9B6B', unit:'yd', sunit:'mph', win:5 },
+    settings:{ accent:'#3E9B6B', unit:'yd', sunit:'mph', win:5, strike:'8i' },
     bag: BAG_SPEC.map(mkClub),
     practice:{ log:[], cur:null },
     putt: puttDefaults(),
@@ -798,6 +798,7 @@ function normalize(d){
   if(['yd','m'].indexOf(d.settings.unit)<0) d.settings.unit = 'yd';
   if(['mph','kmh'].indexOf(d.settings.sunit)<0) d.settings.sunit = 'mph';
   if([3,5,8].indexOf(d.settings.win)<0) d.settings.win = 5;
+  d.settings.strike = typeof d.settings.strike === 'string' ? d.settings.strike.slice(0, 4) : '8i';
   d.bag = d.bag.filter(c => c && typeof c === 'object').slice(0, 40);
   let ctr = 0;
   for(const c of d.bag){
@@ -1770,7 +1771,22 @@ const PUTT_DRILLS = [
    the low point forward ALONE drives the path further in-to-out. Every drill here
    pairs the pressure shift with the chest turning open, which moves both the right
    way. Lefty wording throughout: lead = RIGHT foot, trail = LEFT. */
-function strikeClub(x){ return S.bag.find(c => c.key === '8i') || x.mid || x.shortIron || null; }
+/* The club the strike blocks and the test are built around. It is a SETTING, read
+   at render time, so changing it re-labels a session already in progress - no
+   rebuild needed. A key that is no longer in the bag falls back to the 8 iron. */
+function strikeClub(x){
+  return S.bag.find(c => c.key === S.settings.strike && c.type === 'iron')
+      || S.bag.find(c => c.key === '8i') || x.mid || x.shortIron || null;
+}
+function strikePickerHTML(){
+  const irons = S.bag.filter(c => c.type === 'iron' && dispType(c) === 'iron').sort((a,b) => b.loft - a.loft);
+  if(irons.length < 2) return '';
+  const cur = strikeClub(drillCtx());
+  let h = '<div class="eqlab" style="padding:14px 0 0"><span class="eqn">STRIKE CLUB</span><span class="eqn">'
+        + (cur ? 'pass line '+launchCeil(cur)+'&deg; launch' : '')+'</span></div><div class="segrow" style="padding-top:8px">';
+  for(const c of irons) h += '<button class="seg'+(cur && cur.id === c.id ? ' on' : '')+'" data-act="pstrike" data-k="'+esc(c.key)+'" aria-label="Strike club '+esc(c.name)+'">'+esc(c.key)+'</button>';
+  return h + '</div>';
+}
 function strikeTrio(x){
   const out = [];
   for(const c of [x.shortIron, x.mid, x.irons.find(i => i.key === '5i') || x.irons[0]]){
@@ -2364,6 +2380,7 @@ function renderPractice(){
   h += '</div>'
     + (UI.pfocus==='gap' ? '<p class="bodytext dim small">Gapping day: a data-collection session. The app picks your least-logged clubs and you turn them into real stock numbers.</p>' : '')
     + (UI.pfocus==='strike' ? '<p class="bodytext dim small">Low point and pressure shift. A fixed progression - each step removes one constraint from the step before. Bring a towel and a headcover. Lead foot = RIGHT foot.</p>' : ' ')
+    + (UI.pfocus==='strike' ? strikePickerHTML() : ' ')
     + (UI.pfocus==='putting' ? '<p class="bodytext dim small">Indoor mat session. Drills adapt to the mat profile below - grain and break drills only appear if your mat has them.</p>' : '')
     + '<button class="bigadd" data-act="pbuild">'+(P.cur?'REBUILD (NEW DRILLS)':'BUILD MY SESSION')+'</button></div>';
 
@@ -2829,6 +2846,7 @@ function handleTap(e){
 
   if(act==='pmins'){ UI.pmins = parseInt(b.dataset.m,10); render(); return; }
   if(act==='pfocus'){ UI.pfocus = b.dataset.f; if(UI.pfocus === 'strike') UI.lmt = '7i'; render(); return; }
+  if(act==='pstrike'){ S.settings.strike = String(b.dataset.k).slice(0, 4); save(); render(); return; }
   if(act==='lmt'){ UI.lmt = b.dataset.k; render(); return; }
   if(act==='pbuild'){
     const seed = Math.floor(Math.random()*2147483647);
@@ -2964,6 +2982,19 @@ function handleInput(e){
 (function boot(){
   loadData();
   applyAccent();
+  /* The worker reloads this window when a new build lands. Put the user back on
+     the tab they were reading instead of dumping them on THE BAG. One-shot, and a
+     cold launch has no sessionStorage, so it still starts on the default tab. */
+  try{
+    const snap = sessionStorage.getItem('yb-ui');
+    sessionStorage.removeItem('yb-ui');
+    if(snap){
+      const p = snap.split('|'), m = parseInt(p[2], 10);
+      if(['bag','gaps','predict','practice','tune'].indexOf(p[0]) >= 0) UI.tab = p[0];
+      if(FOCI.some(f => f[0] === p[1])) UI.pfocus = p[1];
+      if([15,30,45,60,90].indexOf(m) >= 0) UI.pmins = m;
+    }
+  }catch(e){}
   render();
   document.body.classList.add('boot');
   /* a one-time migration ran inside normalize(): persist it now so it never
@@ -3014,6 +3045,9 @@ function handleInput(e){
   }
   document.addEventListener('keydown', e => { if(e.key === 'Escape' && UI.sheet) closeSheet(); });
   window.addEventListener('pagehide', flushSave);
+  window.addEventListener('pagehide', ()=>{
+    try{ sessionStorage.setItem('yb-ui', UI.tab + '|' + UI.pfocus + '|' + UI.pmins); }catch(e){}
+  });
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState === 'hidden'){ flushSave(); return; }
     /* another tab may have written newer data */

@@ -122,6 +122,11 @@ path are geared together, so a low-point drill with no turn in it makes an
 in-to-out path worse. Wording is lefty: lead = RIGHT foot.
 `launchCeil(c)` is the pass line for "compressed" (max launch angle that scores).
 It is marked YOURS TO TUNE - Ben owns that number, do not re-derive it.
+The club the blocks and the test use is `settings.strike` (default `8i`), set from
+the STRIKE CLUB row in the builder. `strikeClub()` reads it at RENDER time, so a
+change re-labels a session in progress - never bake the club into `practice.cur`.
+`boot()` restores tab / focus / minutes once from sessionStorage `yb-ui` (written on
+`pagehide`), because the worker reloads the window when a new build lands.
 
 **Equipment swaps.** Clubs carry `grip` and `since` (ISO date the current head
 went in the bag). `setHead(c, label)` is the only way a model pick writes a head:
