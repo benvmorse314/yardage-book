@@ -462,17 +462,23 @@ const CLUB_LIB = [
 
 /* Ben's real bag - the default/reset bag, with the clubs + equipment he plays.
    Lofts are best-guess starting points; tune each in the club sheet. */
+/* 2026-10-12 iron swap: 4i-9i went from Takomo 201T mkII to Titleist T100 (2025,
+   the 4th-gen head). The PW stayed. Lofts are Titleist's stock spec, 1 deg stronger
+   than the 2023 head. T100_FROM is the head the one-time migration looks for. */
+const T100_HEAD = 'Titleist T100 (2025)', T100_SHAFT = 'Dynamic Gold X100 Onyx 130g', T100_GRIP = 'Midsize Plus4';
+const T100_SWAP = {'4i':23, '5i':26, '6i':29, '7i':33, '8i':37, '9i':41};
+const T100_SINCE = '2026-10-12', T100_FROM = 'Takomo 201T mkII';
 const BAG_SPEC = [
   {key:'DR', name:'Driver',         type:'wood',  loft:10.5, head:'Callaway Elyte',   shaft:'Graphite Design Tour AD GC 6'},
   {key:'5W', name:'5 Wood',         type:'wood',  loft:18},
   {key:'7W', name:'7 Wood',         type:'wood',  loft:21},
   {key:'3i', name:'3 Iron (UT)',    type:'iron',  loft:20,   head:'Callaway UT 2024', shaft:'Graphite Design 85g Stiff (hybrid)'},
-  {key:'4i', name:'4 Iron',         type:'iron',  loft:24,   head:'Takomo 201T mkII'},
-  {key:'5i', name:'5 Iron',         type:'iron',  loft:27,   head:'Takomo 201T mkII'},
-  {key:'6i', name:'6 Iron',         type:'iron',  loft:30.5, head:'Takomo 201T mkII'},
-  {key:'7i', name:'7 Iron',         type:'iron',  loft:34,   head:'Takomo 201T mkII'},
-  {key:'8i', name:'8 Iron',         type:'iron',  loft:38,   head:'Takomo 201T mkII'},
-  {key:'9i', name:'9 Iron',         type:'iron',  loft:42,   head:'Takomo 201T mkII'},
+  {key:'4i', name:'4 Iron',         type:'iron',  loft:23,   head:T100_HEAD, shaft:T100_SHAFT, grip:T100_GRIP},
+  {key:'5i', name:'5 Iron',         type:'iron',  loft:26,   head:T100_HEAD, shaft:T100_SHAFT, grip:T100_GRIP},
+  {key:'6i', name:'6 Iron',         type:'iron',  loft:29,   head:T100_HEAD, shaft:T100_SHAFT, grip:T100_GRIP},
+  {key:'7i', name:'7 Iron',         type:'iron',  loft:33,   head:T100_HEAD, shaft:T100_SHAFT, grip:T100_GRIP},
+  {key:'8i', name:'8 Iron',         type:'iron',  loft:37,   head:T100_HEAD, shaft:T100_SHAFT, grip:T100_GRIP},
+  {key:'9i', name:'9 Iron',         type:'iron',  loft:41,   head:T100_HEAD, shaft:T100_SHAFT, grip:T100_GRIP},
   {key:'PW', name:'Pitching Wedge', type:'wedge', loft:46,   head:'Takomo 201T mkII'},
   {key:'52', name:'52 Wedge',       type:'wedge', loft:52,   head:'Takomo SF2'},
   {key:'56', name:'56 Wedge',       type:'wedge', loft:56,   head:'Takomo SF2'},
@@ -490,6 +496,7 @@ const IRON_MODELS = [
   /* Players (traditional lofts, ~34deg 7-iron) */
   {brand:'Takomo',    model:'201T mkII',        level:'Players',          lofts:{'2i':18,'3i':21,'4i':24,'5i':27,'6i':30.5,'7i':34,'8i':38,'9i':42,'PW':46}},
   {brand:'Takomo',    model:'101T',             level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30.5,'7i':34,'8i':38,'9i':42,'PW':46}},
+  {brand:'Titleist',  model:'T100 (2025)',      level:'Players',          lofts:{'3i':20,'4i':23,'5i':26,'6i':29,'7i':33,'8i':37,'9i':41,'PW':45}},
   {brand:'Titleist',  model:'T100 (2023)',      level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
   {brand:'Titleist',  model:'620 CB',           level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
   {brand:'Titleist',  model:'620 MB',           level:'Players',          lofts:{'3i':21,'4i':24,'5i':27,'6i':30,'7i':34,'8i':38,'9i':42,'PW':46}},
@@ -570,6 +577,13 @@ const WEDGE_MODELS = [
 ];
 function ironModelLabel(m){ return m.brand + ' ' + m.model; }
 function gearLabel(m){ return m.brand + ' ' + m.model; }
+/* Re-heading a club is a physical swap, so stamp the date: readings older than
+   `since` came off a different club. Going from blank to a name is only labelling
+   what was already in the bag, so that does not stamp. */
+function setHead(c, label){
+  if(c.head && c.head !== label) c.since = todayISO();
+  c.head = label;
+}
 const CORE_IRONS = ['4i','5i','6i','7i','8i','9i','PW'];
 /* Category membership is decided by SLOT, never by loft. Loft is user-editable,
    so a loft rule let a PW bent to 48 sit in two categories at once and a wedge
@@ -629,7 +643,7 @@ function applyGearModel(cat, idx){
   const targets = gearTargets(cat);
   if(!targets.length){ toast(cat === 'wood' ? 'No woods in your bag.' : 'No wedges in your bag.'); return; }
   const label = gearLabel(m).slice(0, 40);
-  for(const c of targets) c.head = label;
+  for(const c of targets) setHead(c, label);
   save();
   toast(label + ' \u2192 ' + targets.length + ' club' + (targets.length === 1 ? '' : 's') + '.', true);
 }
@@ -678,12 +692,12 @@ function applyIronModel(idx, addMissing){
     if(m.lofts[key] === undefined) continue;
     const loft = clamp(m.lofts[key], 6, 66);
     const club = S.bag.find(x => x.key === key);
-    if(club){ club.loft = loft; club.head = label; updated++; }
+    if(club){ club.loft = loft; setHead(club, label); updated++; }
     else if(addMissing){
       const lib = CLUB_LIB.find(l => l.key === key);
       S.bag.push({id:'x'+Date.now().toString(36)+key, key, name: lib ? lib.name : key,
                   type: lib ? lib.type : (key==='PW'?'wedge':'iron'), loft,
-                  head: label, shaft:'', carry:null, ball:null, auto:true, readings:[]});
+                  head: label, shaft:'', grip:'', since:'', carry:null, ball:null, auto:true, readings:[]});
       added++;
     }
   }
@@ -742,6 +756,7 @@ const ACCENTS = [
 const KEY = 'yb-data-v1';
 const GF_KEY = 'gf-data-v1';   /* Ground Force data - READ ONLY, never write */
 let S = null;
+let BOOT_NOTE = null;   /* set by a migration inside normalize(); boot() saves + announces it */
 let UI = { tab:'bag', sheet:null, saveT:null, tipT:null, confirm:null,
            pred:{type:'iron', loft:21}, addType:'iron', addLoft:21, swTag:'full',
            pmins:30, pfocus:'irons', eqPick:{},
@@ -749,7 +764,7 @@ let UI = { tab:'bag', sheet:null, saveT:null, tipT:null, confirm:null,
 
 function mkClub(l){
   return {id:l.key, key:l.key, name:l.name, type:l.type, loft:l.loft,
-          head:l.head||'', shaft:l.shaft||'',
+          head:l.head||'', shaft:l.shaft||'', grip:l.grip||'', since:'',
           carry:null, ball:null, auto:true, readings:[]};
 }
 /* Putting lab. The indoor mat is to putting drills what the bag is to club
@@ -792,6 +807,9 @@ function normalize(d){
     c.name = c.name ? String(c.name).slice(0, 24) : String(c.key);
     c.head = c.head ? String(c.head).slice(0, 40) : '';
     c.shaft = c.shaft ? String(c.shaft).slice(0, 48) : '';
+    c.grip = c.grip ? String(c.grip).slice(0, 32) : '';
+    /* ISO date the current head went in the bag - readings dated before it were hit with a different club */
+    c.since = typeof c.since === 'string' ? c.since.slice(0, 10) : '';
     if(c.auto === undefined) c.auto = true;
     c.carry = num(c.carry); c.ball = num(c.ball);
     if(!Array.isArray(c.readings)) c.readings = [];
@@ -868,6 +886,20 @@ function normalize(d){
     .slice(-30);
   if(!d.meta || typeof d.meta !== 'object' || Array.isArray(d.meta)) d.meta = { lastBackup:null };
   d.meta.rev = (typeof d.meta.rev === 'number' && isFinite(d.meta.rev)) ? d.meta.rev : 0;
+  /* One-time equipment migration (see T100_SWAP). Guarded twice: the meta flag makes
+     it run once, and it only rewrites a club still wearing the old head - a club
+     re-headed by hand since is the owner's call, not ours. Readings are never touched. */
+  if(!d.meta.t100){
+    let moved = 0;
+    for(const c of d.bag){
+      if(!Object.prototype.hasOwnProperty.call(T100_SWAP, c.key) || c.head !== T100_FROM) continue;
+      c.head = T100_HEAD; c.loft = T100_SWAP[c.key]; c.shaft = T100_SHAFT; c.grip = T100_GRIP;
+      c.since = T100_SINCE;
+      moved++;
+    }
+    d.meta.t100 = 1;
+    if(moved) BOOT_NOTE = moved + ' irons updated to ' + T100_HEAD + ' - lofts, shaft and grip.';
+  }
   /* courtesy upgrade: a pristine v1 default bag (never customized, no data) becomes the real bag */
   try{
     const keys = d.bag.map(c => c.key).slice().sort();
@@ -997,6 +1029,20 @@ function stockOf(c){
   if(out.c === null && c.carry !== null){ out.c = c.carry; out.srcC = 'manual'; }
   if(out.b === null && c.ball !== null){ out.b = c.ball; out.srcB = 'manual'; }
   return out;
+}
+
+/* How many carries inside the current stock window were hit with a PREVIOUS head.
+   stockOf() deliberately does not filter by date - the vault ingester mirrors it
+   line for line - so this only REPORTS the pollution. Fresh readings push the old
+   ones out of the window on their own. */
+function staleInStock(c){
+  if(!c.since || c.auto === false) return 0;
+  return c.readings.filter(r => !isPartial(r) && r.c !== null).slice(-S.settings.win)
+    .filter(r => r.d < c.since).length;
+}
+/* readings logged with the head that is in the bag today */
+function freshCount(c){
+  return c.readings.filter(r => !c.since || r.d >= c.since).length;
 }
 
 function partialStock(c, tag){
@@ -1173,6 +1219,7 @@ function renderBag(){
     let sub = fmtLoft(c.loft) + ' \u00b7 ' + dispType(c);
     if(c.head) sub += ' \u00b7 ' + c.head;
     const nr = c.readings.length;
+    const staleHTML = staleInStock(c) ? '<span class="mchip warn">RE-LOG</span>' : '';
     if(nr) sub += ' \u00b7 ' + nr + ' shot' + (nr===1?'':'s');
     if(st.srcC === 'manual') sub += ' \u00b7 manual';
     let carryHTML, ballHTML;
@@ -1193,7 +1240,7 @@ function renderBag(){
     const trHTML = (has && tr) ? '<span class="trend ' + (tr>0?'up':'dn') + '">' + (tr>0?'\u25b2 +':'\u25bc ') + Math.abs(Math.round(d2u(tr))) + '</span>' : '';
     h += '<button class="bagrow' + (has?' dialed':' est') + '" data-act="club" data-id="'+esc(c.id)+'">'
       + '<span class="tagbox">'+esc(c.key)+'</span>'
-      + '<span class="bname"><b>'+esc(c.name)+trHTML+'</b><span class="bsub">'+esc(sub)+'</span></span>'
+      + '<span class="bname"><b>'+esc(c.name)+trHTML+staleHTML+'</b><span class="bsub">'+esc(sub)+'</span></span>'
       + '<span class="bnum"><span class="bcarry">'+carryHTML+'</span><span class="bball">'+ballHTML+'</span></span>'
       + '</button>';
   }
@@ -1713,17 +1760,107 @@ const PUTT_DRILLS = [
   how:(x)=>{ const c = puttCtx(); return 'Twenty putts from '+fmtFt(6)+''+(c.m.breaks?', same break insert every time':'')+'. Full routine on every ball. Then LOG IT in the Putting Lab card above - same distance, same setup, every session, or the number means nothing.'; },
   win:()=>'This is the one number that tracks. It will be low at first on a fast surface; that is the point.'}
 ];
+/* ---------- STRIKE (low point + pressure shift) ----------
+   The measured fault (Garmin R10, 2026-10-03, 8 iron): attack +2.5, path 7 in-to-out.
+   That is ONE fault - hanging back - and the two numbers are geared together: the
+   club travels down-and-out before its low point and up-and-in after it. So moving
+   the low point forward ALONE drives the path further in-to-out. Every drill here
+   pairs the pressure shift with the chest turning open, which moves both the right
+   way. Lefty wording throughout: lead = RIGHT foot, trail = LEFT. */
+function strikeClub(x){ return S.bag.find(c => c.key === '8i') || x.mid || x.shortIron || null; }
+function strikeTrio(x){
+  const out = [];
+  for(const c of [x.shortIron, x.mid, x.irons.find(i => i.key === '5i') || x.irons[0]]){
+    if(c && out.indexOf(c) < 0) out.push(c);
+  }
+  return out;
+}
+
+/* ---- YOURS TO TUNE, BEN -----------------------------------------------------
+   The pass line for "compressed": the HIGHEST launch angle (degrees) that still
+   scores a ball for club c in the Strike Test and the Compression Ladder.
+   Default = 52% of static loft. For reference, tour launch runs about 48% of loft
+   (8 iron: ~18 deg off a 37-38 deg club) and the measured 8 iron was 21 = 55%.
+   So 0.52 sits halfway between where the strike is today and tour.
+   Too strict and every session scores 0 of 10; too loose and it rewards the flip. */
+function launchCeil(c){
+  return Math.round(c.loft * 0.52);
+}
+
+const STRIKE_DRILLS = [
+ {id:'s_step', name:'Step-Through', phase:'warm', focus:['strike'],
+  clubs:x=>x.shortIron?x.shortIron.name:'short iron',
+  how:()=>'Feet together, ball centered. Start the backswing, and as the club reaches the top step your lead (right) foot toward the target and swing. 60% speed, eight to ten balls. You cannot hang back on this one - the step puts the pressure forward before the club comes down.',
+  win:()=>'Every finish balanced on the right foot, left heel up, held for two seconds.'},
+ {id:'s_line', name:'Brush The Line', phase:'block', focus:['strike'],
+  clubs:x=>{ const c = strikeClub(x); return c?c.name:'mid iron'; },
+  how:()=>'No ball yet. Lay a strip of tape across the mat where the ball would sit. Half swings: the club must brush the mat on the TARGET side of the tape. Ten brushes, then set a ball on the tape and keep the same brush.',
+  win:()=>'8 of 10 brushes land on the target side of the tape.'},
+ {id:'s_kick', name:'Kickstand Punches', phase:'block', focus:['strike'],
+  clubs:x=>{ const c = strikeClub(x); return c?c.name:'mid iron'; },
+  how:()=>'Trail (left) foot pulled back onto its toe like a kickstand. 85% of your weight on the lead (right) foot - and it stays there. Hip-high to hip-high. Fold a towel flat one grip-length behind the ball: the mat hides a fat shot, the towel does not.',
+  win:()=>'Ball first, towel untouched, 8 of 10.'},
+ {id:'s_turn', name:'Shift Plus Turn', phase:'block', focus:['strike'],
+  clubs:x=>{ const c = strikeClub(x); return c?c.name:'mid iron'; },
+  how:()=>'Normal stance, towel stays. Headcover just inside the target line, a foot behind the ball. Three-quarter swings: load the right foot, then chest and hands exit around to the RIGHT. Shift without turn drives your path further in-to-out - the turn is what brings it back to neutral.',
+  win:()=>'Belt buckle at the target, left heel up, held two seconds - and the headcover never moves.'},
+ {id:'s_pump', name:'Pump And Go', phase:'block', focus:['strike'],
+  clubs:x=>{ const c = strikeClub(x); return c?c.name:'mid iron'; },
+  how:()=>'Swing to the top, then pump down to lead-arm-parallel twice. On each pump feel the pressure already in the right foot and the chest starting to open. Go on the third. Slow rehearsals, real strike.',
+  win:()=>'Ball first, towel untouched, 6 of 8.'},
+ {id:'s_oneone', name:'One And One', phase:'transfer', focus:['strike'],
+  clubs:x=>{ const t = strikeTrio(x); return t.length ? t.map(c=>c.key).join(' / ') : 'irons'; },
+  how:(x)=>{ const c = strikeClub(x), t = strikeTrio(x);
+    return 'Alternate one kickstand punch with one full swing'+(c ? ' with the '+x.nm(c) : '')+'. Then rotate '
+      + (t.length ? '<span class="mono">'+t.map(i=>x.nm(i)).join(' &middot; ')+'</span>' : 'three irons')
+      + ' one ball each - never the same club twice in a row. The punch is the reminder; the full swing is the test.'; },
+  win:()=>'Every full swing finishes like the punch: weight right, chest at the target.'},
+ {id:'s_ladder', name:'Compression Ladder', phase:'transfer', focus:['strike'],
+  clubs:x=>{ const t = strikeTrio(x); return t.length ? t.map(c=>c.key).join(' / ') : 'irons'; },
+  how:(x)=>{ const t = strikeTrio(x);
+    return 'Two balls each, short to long, then back down'
+      + (t.length ? ': <span class="mono">'+t.map(i=>x.nm(i)+' &le; '+launchCeil(i)+'&deg;').join(' &middot; ')+'</span>' : ' ')
+      + '. A ball counts only under its launch ceiling. The long irons are where hanging back creeps in - same shift, same turn.'; },
+  win:()=>'One clean pass up the ladder and back down.'},
+ {id:'s_test', name:'Ten-Ball Strike Test', phase:'pressure', focus:['strike'],
+  clubs:x=>{ const c = strikeClub(x); return c?c.name:'mid iron'; },
+  how:(x)=>{ const c = strikeClub(x);
+    if(!c) return 'Ten full swings, full routine. A ball scores only if it misses the towel and comes out low and compressed.';
+    const aa = lmTargetFor(c.key).aa;
+    return 'Ten full swings with the '+x.nm(c)+', full routine every ball. A ball scores only if it misses the towel AND launches at or under <b>'+launchCeil(c)+'&deg;</b>. Lower launch with the same ball speed is compression. Lower launch with LESS ball speed is only a chop.'
+      + (aa ? ' On a monitor that reads attack angle, the real target is <span class="mono">'+lmWinStr('sgn', aa)+'</span>.' : ' '); },
+  win:()=>'Write the count down and beat it next session. 6 of 10 is the first bar.'}
+];
+for(const d of STRIKE_DRILLS) DRILLS.push(d);
+
+/* A technique session is a PROGRESSION, not a shuffle: each step removes one
+   constraint from the step before, so the order is fixed and only the depth scales
+   with the clock. [drill id, weight, shortest session that includes it] */
+const STRIKE_SEQ = [['s_step',2,0], ['s_line',3,90], ['s_kick',4,0], ['s_turn',4,30], ['s_pump',3,60],
+                    ['s_oneone',4,30], ['s_ladder',4,90], ['s_test',4,0]];
+function planStrike(mins){
+  const steps = STRIKE_SEQ.filter(s => mins >= s[2]);
+  const tw = steps.reduce((a,s) => a + s[1], 0);
+  let left = mins;
+  return steps.map((s, i) => {
+    const m = i === steps.length-1 ? Math.max(3, left) : Math.max(3, Math.round(mins * s[1] / tw));
+    left -= m;
+    return {id:s[0], mins:m};
+  });
+}
+
 for(const d of PUTT_DRILLS) DRILLS.push(d);
 
 const DRILLMAP = {};
 for(const d of DRILLS) DRILLMAP[d.id] = d;
 
 const PHASE_LABEL = {warm:'WARM-UP', block:'BLOCK', transfer:'TRANSFER', pressure:'PRESSURE'};
-const FOCI = [['irons','IRONS'],['wedges','WEDGES'],['driver','DRIVER'],['bag','FULL BAG'],['gap','GAPPING'],['putting','PUTTING']];
+const FOCI = [['strike','STRIKE'],['irons','IRONS'],['wedges','WEDGES'],['driver','DRIVER'],['bag','FULL BAG'],['gap','GAPPING'],['putting','PUTTING']];
 
 function planSession(focus, mins, seed){
   const rng = mulberry(seed);
   if(focus === 'gap') return planGapping(mins);
+  if(focus === 'strike') return planStrike(mins);
   const plan = [], used = {};
   const pick = (phase, budget) => {
     /* 'any' drills are club drills - they must never leak into a putting plan */
@@ -1752,7 +1889,7 @@ function planGapping(mins){
   /* data day: least-logged clubs first, ~4 min per club */
   const nClubs = clamp(Math.floor((mins - 8) / 4), 3, S.bag.length);
   const keys = S.bag.slice()
-    .sort((a,b) => a.readings.length - b.readings.length || a.loft - b.loft)
+    .sort((a,b) => freshCount(a) - freshCount(b) || a.loft - b.loft)   /* a re-headed club counts as unlogged */
     .slice(0, nClubs).sort((a,b) => b.loft - a.loft).map(c => c.key);
   const plan = [{id:'g_warm', mins:5}, {id:'g_clubs', mins:nClubs*4, keys}];
   if(mins >= 60 && S.bag.some(c => c.type==='wedge')) plan.push({id:'g_partials', mins:10});
@@ -2223,6 +2360,7 @@ function renderPractice(){
   for(const f of FOCI) h += '<button class="seg'+(UI.pfocus===f[0]?' on':'')+'" data-act="pfocus" data-f="'+f[0]+'">'+f[1]+'</button>';
   h += '</div>'
     + (UI.pfocus==='gap' ? '<p class="bodytext dim small">Gapping day: a data-collection session. The app picks your least-logged clubs and you turn them into real stock numbers.</p>' : '')
+    + (UI.pfocus==='strike' ? '<p class="bodytext dim small">Low point and pressure shift. A fixed progression - each step removes one constraint from the step before. Bring a towel and a headcover. Lead foot = RIGHT foot.</p>' : ' ')
     + (UI.pfocus==='putting' ? '<p class="bodytext dim small">Indoor mat session. Drills adapt to the mat profile below - grain and break drills only appear if your mat has them.</p>' : '')
     + '<button class="bigadd" data-act="pbuild">'+(P.cur?'REBUILD (NEW DRILLS)':'BUILD MY SESSION')+'</button></div>';
 
@@ -2329,7 +2467,7 @@ function renderTune(){
   h += '<p class="bodytext dim small">Applying takes two taps \u2014 the first shows exactly how many clubs it will rewrite. Your PW rides with the iron set; a 2i/3i driving iron or utility is left alone, so set that one from its own card.</p></div>';
 
   h += '<div class="card pad"><div class="eyebrow">MY BAG</div>'
-    + '<p class="bodytext dim small">Tap any club in THE BAG to set its loft, model, head and shaft. The button below reloads your default bag (Driver, 5W, 7W, 3i utility, 4i-PW Takomo 201T mkII, 52/56/60 Takomo SF2) \u2014 it replaces the current club list but keeps your settings.</p>'
+    + '<p class="bodytext dim small">Tap any club in THE BAG to set its loft, model, head and shaft. The button below reloads your default bag (Driver, 5W, 7W, 3i utility, 4i-9i Titleist T100, PW Takomo 201T mkII, 52/56/60 Takomo SF2) \u2014 it replaces the current club list but keeps your settings.</p>'
     + '<div class="segrow"><button class="seg'+(UI.confirm==='rebag'?' danger':'')+'" data-act="rebag">'+(UI.confirm==='rebag'?'TAP AGAIN \u2014 REPLACES YOUR CLUBS':'RESET BAG TO MY CLUBS')+'</button></div></div>';
 
   const bk = S.meta.lastBackup;
@@ -2409,6 +2547,10 @@ function sheetClub(){
     h += '<div class="wrow"><span>Chest-high takeaway</span>'+pcell(wpc, src)+'</div>'
       + '<div class="wrow"><span>Hip-high takeaway</span>'+pcell(wph, srh)+'</div>';
   }
+  const staleN = staleInStock(c);
+  if(staleN){
+    h += '<p class="bodytext small" style="color:var(--gold)">'+staleN+' of the carries behind this number were hit with the previous head (this one went in the bag '+esc(fmtDate(c.since))+'). Log fresh shots and they drop out on their own.</p>';
+  }
   if(M.fc){
     h += '<button class="predictbtn" data-act="predictclub">'
       + (st.c === null ? 'PREDICT THIS CLUB' : 'SEE FULL PREDICTION')
@@ -2432,6 +2574,7 @@ function sheetClub(){
   }
   h += '<div class="inpair"><span class="lab">HEAD</span><input class="cin" value="'+esc(c.head||'')+'" maxlength="40" placeholder="e.g. Takomo 201T mkII" data-act="chead"></div>'
     + '<div class="inpair"><span class="lab">SHAFT</span><input class="cin" value="'+esc(c.shaft||'')+'" maxlength="48" placeholder="e.g. Graphite Design Tour AD" data-act="cshaft"></div>'
+    + '<div class="inpair"><span class="lab">GRIP</span><input class="cin" value="'+esc(c.grip||'')+'" maxlength="32" placeholder="e.g. Tour Velvet Midsize" data-act="cgrip"></div>'
     + '<p class="bodytext dim small">'+(c.type==='iron'?'Pick your iron model and the loft fills in. ':'')+'The loft above drives the model \u2014 set it to your club\u2019s real loft so predictions match.</p></div>';
 
   h += '<div class="sheetsec"><div class="eyebrow">LOG A READING</div>';
@@ -2663,7 +2806,7 @@ function handleTap(e){
       key = key.slice(0,3) + n;
     }
     S.bag.push({id:'x'+Date.now().toString(36), key, name:name.slice(0,24), type:UI.addType, loft:UI.addLoft,
-                head:'', shaft:'', carry:null, ball:null, auto:true, readings:[]});
+                head:'', shaft:'', grip:'', since:'', carry:null, ball:null, auto:true, readings:[]});
     save(); closeSheet(); toast(name+' added.', true); return;
   }
 
@@ -2677,7 +2820,7 @@ function handleTap(e){
   }
 
   if(act==='pmins'){ UI.pmins = parseInt(b.dataset.m,10); render(); return; }
-  if(act==='pfocus'){ UI.pfocus = b.dataset.f; render(); return; }
+  if(act==='pfocus'){ UI.pfocus = b.dataset.f; if(UI.pfocus === 'strike') UI.lmt = '7i'; render(); return; }
   if(act==='lmt'){ UI.lmt = b.dataset.k; render(); return; }
   if(act==='pbuild'){
     const seed = Math.floor(Math.random()*2147483647);
@@ -2789,6 +2932,7 @@ function handleInput(e){
   if(act==='cname' && c){ c.name = b.value.slice(0,24); save(); return; }
   if(act==='chead' && c){ c.head = b.value.slice(0,40); save(); return; }
   if(act==='cshaft' && c){ c.shaft = b.value.slice(0,48); save(); return; }
+  if(act==='cgrip' && c){ c.grip = b.value.slice(0,32); save(); return; }
   /* held in UI, not S - nothing is stored until LOG THE TEST is tapped */
   if(act==='plmade'){ UI.plog.made = b.value === '' ? null : parseIn(b.value); return; }
   if(act==='platt'){  UI.plog.att  = b.value === '' ? null : parseIn(b.value); return; }
@@ -2801,6 +2945,9 @@ function handleInput(e){
   applyAccent();
   render();
   document.body.classList.add('boot');
+  /* a one-time migration ran inside normalize(): persist it now so it never
+     re-runs, and say what was changed on the owner's behalf */
+  if(BOOT_NOTE){ const note = BOOT_NOTE; BOOT_NOTE = null; save(); setTimeout(() => toast(note, true), 1300); }
 
   document.body.addEventListener('click', handleTap);
   document.body.addEventListener('input', handleInput);
@@ -2819,14 +2966,14 @@ function handleInput(e){
       const list = b.dataset.cat === 'wood' ? WOOD_MODELS : WEDGE_MODELS;
       const g = list[+b.value];
       if(!g) return;
-      c.head = gearLabel(g).slice(0,40);
+      setHead(c, gearLabel(g).slice(0,40));
       save(); sheetRender();
       toast(gearLabel(g) + ' \u00b7 head set', true);
       return;
     }
     const m = IRON_MODELS[+b.value];
     if(!m) return;
-    c.head = ironModelLabel(m).slice(0,40);
+    setHead(c, ironModelLabel(m).slice(0,40));
     const hit = m.lofts[c.key] !== undefined;
     if(hit) c.loft = clamp(m.lofts[c.key], 6, 66);
     save(); sheetRender();

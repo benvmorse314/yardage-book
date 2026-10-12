@@ -111,6 +111,36 @@ wedge in the bag). State is `S.lm.sessions = [{id, d, src, fed, shots}]`.
   the documented export format and a synthetic file, NOT yet a real export. Check
   the first real file against `LM_COLS` before trusting directional grades.
 
+## Strike focus + equipment swaps (v1.10)
+
+**STRIKE** is a session focus for low point + pressure shift. Unlike every other
+focus it is a fixed PROGRESSION, not a shuffle: `planStrike()` walks `STRIKE_SEQ`
+in order and only the depth scales with the clock (each step removes one
+constraint from the step before). Its drills are `s_*` entries in `STRIKE_DRILLS`.
+The coaching premise is written at the top of that block - attack angle and club
+path are geared together, so a low-point drill with no turn in it makes an
+in-to-out path worse. Wording is lefty: lead = RIGHT foot.
+`launchCeil(c)` is the pass line for "compressed" (max launch angle that scores).
+It is marked YOURS TO TUNE - Ben owns that number, do not re-derive it.
+
+**Equipment swaps.** Clubs carry `grip` and `since` (ISO date the current head
+went in the bag). `setHead(c, label)` is the only way a model pick writes a head:
+it stamps `since` when a NAMED head is replaced by a different one, and does not
+stamp when a blank head is first labelled (that is labelling, not a swap).
+
+`staleInStock(c)` counts carries inside the stock window that predate `since`.
+It only REPORTS (RE-LOG chip on the bag row, a line in the club sheet) -
+**`stockOf()` must never filter by date.** The vault ingester
+(`~/.claude/skills/metrics-pull/scripts/_golf.py` `stock_of`) mirrors `stockOf()`
+line for line; change one without the other and every golf metric drifts.
+Fresh readings push stale ones out of the window on their own.
+
+**One-time migrations** live at the end of `normalize()` behind a `meta` flag
+(`meta.t100` for the 2026-10-12 Takomo -> T100 swap). Pattern: guard on the flag
+AND on the club still wearing the old head, never touch `readings`, set
+`BOOT_NOTE` so `boot()` saves once and toasts what was changed on the owner's
+behalf. A club re-headed by hand since is left alone.
+
 ## The model (how prediction works)
 
 `REFC`/`REFB` are reference carry / ball-speed curves per club family
